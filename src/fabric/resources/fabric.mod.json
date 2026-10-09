@@ -1,0 +1,30 @@
+{
+	"schemaVersion": 1,
+	"id": "lightoverlay",
+	"version": "${version}",
+	"name": "Light Overlay",
+	"description": "Client-side light level overlay that shows block light levels on the floor, colored by mob spawning risk.",
+	"authors": [
+		"L3-N0X"
+	],
+	"contact": {
+		"sources": "https://github.com/L3-N0X/lightoverlay"
+	},
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			{
+				"value": "de.lenox.lightoverlay.LightOverlayFabric",
+				"adapter": "kotlin"
+			}
+		]
+	},
+	"depends": {
+		"fabricloader": ">=${loader_version}",
+		"minecraft": "${minecraft_dependency}",
+		"fabric-api": "*",
+		"fabric-language-kotlin": "*",
+		"yet_another_config_lib_v3": "*"
+	}
+}

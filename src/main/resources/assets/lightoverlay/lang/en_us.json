@@ -1,0 +1,33 @@
+{
+  "key.category.lightoverlay.main": "Light Overlay",
+  "key.lightoverlay.toggle": "Toggle Light Overlay",
+  "key.lightoverlay.config": "Open Light Overlay Config",
+
+  "lightoverlay.message.enabled": "Light overlay enabled",
+  "lightoverlay.message.disabled": "Light overlay disabled",
+
+  "lightoverlay.config.title": "Light Overlay",
+  "lightoverlay.config.category.general": "General",
+  "lightoverlay.config.enabled": "Show Overlay",
+  "lightoverlay.config.enabled.description": "Whether the light level overlay is shown. Can also be toggled with a key binding.",
+  "lightoverlay.config.display_mode": "Display Mode",
+  "lightoverlay.config.display_mode.description": "Which light levels are drawn on each block.",
+  "lightoverlay.config.display_mode.block_light": "Block light",
+  "lightoverlay.config.display_mode.block_and_sky": "Block / sky light",
+  "lightoverlay.config.hide_safe": "Hide Safe Blocks",
+  "lightoverlay.config.hide_safe.description": "Only show blocks where hostile mobs can spawn (block light 0).",
+  "lightoverlay.config.group.range": "Range",
+  "lightoverlay.config.horizontal_radius": "Horizontal Radius",
+  "lightoverlay.config.horizontal_radius.description": "How many blocks around the player are scanned horizontally.",
+  "lightoverlay.config.vertical_radius": "Vertical Radius",
+  "lightoverlay.config.vertical_radius.description": "How many blocks above and below the player are scanned.",
+  "lightoverlay.config.update_interval": "Update Interval (ticks)",
+  "lightoverlay.config.update_interval.description": "How often the light levels around the player are rescanned. 20 ticks = 1 second.",
+  "lightoverlay.config.group.colors": "Colors",
+  "lightoverlay.config.safe_color": "Safe",
+  "lightoverlay.config.safe_color.description": "Block light above 0: hostile mobs cannot spawn here.",
+  "lightoverlay.config.warning_color": "Night Spawns",
+  "lightoverlay.config.warning_color.description": "Block light 0 under open sky: hostile mobs spawn here at night.",
+  "lightoverlay.config.danger_color": "Always Spawns",
+  "lightoverlay.config.danger_color.description": "Block light 0 and dark sky: hostile mobs can spawn here at any time."
+}
