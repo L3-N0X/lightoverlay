@@ -18,6 +18,12 @@
 				"value": "de.lenox.lightoverlay.LightOverlayFabric",
 				"adapter": "kotlin"
 			}
+		],
+		"modmenu": [
+			{
+				"value": "de.lenox.lightoverlay.LightOverlayModMenu",
+				"adapter": "kotlin"
+			}
 		]
 	},
 	"depends": {
@@ -26,5 +32,8 @@
 		"fabric-api": "*",
 		"fabric-language-kotlin": "*",
 		"yet_another_config_lib_v3": "*"
+	},
+	"suggests": {
+		"modmenu": "*"
 	}
 }

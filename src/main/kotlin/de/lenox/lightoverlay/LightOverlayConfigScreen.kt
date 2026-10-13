@@ -7,13 +7,14 @@ import dev.isxander.yacl3.api.OptionGroup
 import dev.isxander.yacl3.api.YetAnotherConfigLib
 import dev.isxander.yacl3.api.controller.ColorControllerBuilder
 import dev.isxander.yacl3.api.controller.EnumControllerBuilder
+import dev.isxander.yacl3.api.controller.FloatSliderControllerBuilder
 import dev.isxander.yacl3.api.controller.IntegerSliderControllerBuilder
 import dev.isxander.yacl3.api.controller.TickBoxControllerBuilder
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 import java.awt.Color
 
-/** YACL config screen. Opened via the config key mapping or NeoForge's mod list. */
+/** YACL config screen. Opened via the config key mapping, Mod Menu (Fabric) or NeoForge's mod list. */
 object LightOverlayConfigScreen {
     private fun tr(key: String): Component = Component.translatable("${LightOverlayMod.MOD_ID}.config.$key")
 
@@ -33,10 +34,18 @@ object LightOverlayConfigScreen {
                         .build()
                 )
                 .option(
+                    Option.createBuilder<Boolean>()
+                        .name(tr("show_while_holding_torch"))
+                        .description(desc("show_while_holding_torch"))
+                        .binding(false, { LightOverlayConfig.showWhileHoldingTorch }, { LightOverlayConfig.showWhileHoldingTorch = it })
+                        .controller { TickBoxControllerBuilder.create(it) }
+                        .build()
+                )
+                .option(
                     Option.createBuilder<DisplayMode>()
                         .name(tr("display_mode"))
                         .description(desc("display_mode"))
-                        .binding(DisplayMode.BLOCK_LIGHT, { LightOverlayConfig.displayMode }, { LightOverlayConfig.displayMode = it })
+                        .binding(DisplayMode.NUMBER, { LightOverlayConfig.displayMode }, { LightOverlayConfig.displayMode = it })
                         .controller {
                             EnumControllerBuilder.create(it)
                                 .enumClass(DisplayMode::class.java)
@@ -50,6 +59,27 @@ object LightOverlayConfigScreen {
                         .description(desc("hide_safe"))
                         .binding(false, { LightOverlayConfig.hideSafeBlocks }, { LightOverlayConfig.hideSafeBlocks = it })
                         .controller { TickBoxControllerBuilder.create(it) }
+                        .build()
+                )
+                .group(
+                    OptionGroup.createBuilder()
+                        .name(tr("group.skirts"))
+                        .option(
+                            Option.createBuilder<Boolean>()
+                                .name(tr("skirts_enabled"))
+                                .description(desc("skirts_enabled"))
+                                .binding(false, { LightOverlayConfig.skirtsEnabled }, { LightOverlayConfig.skirtsEnabled = it })
+                                .controller { TickBoxControllerBuilder.create(it) }
+                                .build()
+                        )
+                        .option(
+                            Option.createBuilder<Float>()
+                                .name(tr("skirt_height"))
+                                .description(desc("skirt_height"))
+                                .binding(LightOverlayConfig.DEFAULT_SKIRT_HEIGHT, { LightOverlayConfig.skirtHeight }, { LightOverlayConfig.skirtHeight = it })
+                                .controller { FloatSliderControllerBuilder.create(it).range(0.1f, 1f).step(0.05f) }
+                                .build()
+                        )
                         .build()
                 )
                 .group(

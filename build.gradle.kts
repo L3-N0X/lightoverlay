@@ -147,6 +147,15 @@ val yaclVersion = when (mcVersion) {
     else -> error("No YACL version configured for $mcVersion")
 } + "-$loader"
 
+// Mod Menu is Fabric-only and optional: compiled against, present in dev runs, not required at runtime.
+val modMenuVersion = when (mcVersion) {
+    "1.21.11" -> "17.0.1"
+    "26.1.2" -> "18.0.2"
+    "26.2" -> "20.0.3"
+    "26.3" -> "21.0.0"
+    else -> error("No Mod Menu version configured for $mcVersion")
+}
+
 repositories {
     maven {
         name = "Kotlin for Forge"
@@ -160,6 +169,15 @@ repositories {
         // YACL's transitive dependencies (quilt parsers)
         name = "QuiltMC"
         url = uri("https://maven.quiltmc.org/repository/release/")
+    }
+    maven {
+        name = "TerraformersMC"
+        url = uri("https://maven.terraformersmc.com/releases/")
+    }
+    maven {
+        // Mod Menu's transitive dependency (Text Placeholder API)
+        name = "Nucleoid"
+        url = uri("https://maven.nucleoid.xyz/")
     }
 }
 
@@ -231,11 +249,15 @@ dependencies {
             add("modImplementation", "net.fabricmc.fabric-api:fabric-api:${fabricVersions.fabricApi}")
             add("modImplementation", "net.fabricmc:fabric-language-kotlin:${fabricVersions.fabricKotlin}")
             add("modImplementation", "dev.isxander:yet-another-config-lib:$yaclVersion")
+            add("modCompileOnly", "com.terraformersmc:modmenu:$modMenuVersion")
+            add("modLocalRuntime", "com.terraformersmc:modmenu:$modMenuVersion")
         } else {
             add("implementation", "net.fabricmc:fabric-loader:${fabricVersions.loader}")
             add("implementation", "net.fabricmc.fabric-api:fabric-api:${fabricVersions.fabricApi}")
             add("implementation", "net.fabricmc:fabric-language-kotlin:${fabricVersions.fabricKotlin}")
             add("implementation", "dev.isxander:yet-another-config-lib:$yaclVersion")
+            add("compileOnly", "com.terraformersmc:modmenu:$modMenuVersion")
+            add("localRuntime", "com.terraformersmc:modmenu:$modMenuVersion")
         }
     } else if (isNeoForge) {
         "implementation"("dev.isxander:yet-another-config-lib:$yaclVersion")
@@ -369,6 +391,7 @@ publishMods {
             requires("yacl")
             if (isFabric) {
                 requires("fabric-api", "fabric-language-kotlin")
+                optional("modmenu")
             } else if (isNeoForge) {
                 requires("kotlin-for-forge")
             }
@@ -390,6 +413,7 @@ publishMods {
             requires("yacl")
             if (isFabric) {
                 requires("fabric-api", "fabric-language-kotlin")
+                optional("modmenu")
             } else if (isNeoForge) {
                 requires("kotlin-for-forge")
             }

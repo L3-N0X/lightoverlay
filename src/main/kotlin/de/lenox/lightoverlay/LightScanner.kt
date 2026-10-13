@@ -10,7 +10,11 @@ import net.minecraft.world.level.LightLayer
  * Runs on the client thread at the end of a tick; the renderer only reads [entries].
  */
 object LightScanner {
-    class Entry(val x: Int, val y: Int, val z: Int, val blockLight: Int, val skyLight: Int)
+    /**
+     * @param edges bitmask of the horizontal sides (bit = [Direction.get2DDataValue]) where the floor ends,
+     *   i.e. the neighbour is open and has no floor of its own. Only filled in when skirts are enabled.
+     */
+    class Entry(val x: Int, val y: Int, val z: Int, val blockLight: Int, val skyLight: Int, val edges: Int)
 
     /** Highest raw sky light at which hostile mobs can still spawn during the day. */
     private const val MAX_SPAWN_SKY_LIGHT = 7
@@ -24,7 +28,7 @@ object LightScanner {
     fun tick(mc: Minecraft) {
         val level = mc.level
         val player = mc.player
-        if (!LightOverlayConfig.enabled || level == null || player == null) {
+        if (!LightOverlayMod.active || level == null || player == null) {
             entries = emptyList()
             ticksUntilScan = 0
             return
@@ -37,10 +41,12 @@ object LightScanner {
         val horizontal = LightOverlayConfig.horizontalRadius
         val vertical = LightOverlayConfig.verticalRadius
         val hideSafe = LightOverlayConfig.hideSafeBlocks
+        val skirts = LightOverlayConfig.skirtsEnabled
 
         val result = ArrayList<Entry>()
         val pos = BlockPos.MutableBlockPos()
         val below = BlockPos.MutableBlockPos()
+        val side = BlockPos.MutableBlockPos()
 
         for (dx in -horizontal..horizontal) {
             for (dz in -horizontal..horizontal) {
@@ -57,13 +63,27 @@ object LightScanner {
                     if (hideSafe && blockLight > 0) continue
                     val skyLight = level.getBrightness(LightLayer.SKY, pos)
 
-                    result.add(Entry(pos.x, pos.y, pos.z, blockLight, skyLight))
+                    var edges = 0
+                    if (skirts) {
+                        for (direction in Direction.Plane.HORIZONTAL) {
+                            side.setWithOffset(pos, direction)
+                            if (!level.getBlockState(side).getCollisionShape(level, side).isEmpty()) continue
+                            below.setWithOffset(side, Direction.DOWN)
+                            if (level.getBlockState(below).isFaceSturdy(level, below, Direction.UP)) continue
+                            edges = edges or (1 shl direction.get2DDataValue())
+                        }
+                    }
+
+                    result.add(Entry(pos.x, pos.y, pos.z, blockLight, skyLight, edges))
                 }
             }
         }
 
         entries = result
     }
+
+    /** Light level during the day: the raw sky light is only darkened at night. */
+    fun dayLightOf(entry: Entry): Int = maxOf(entry.blockLight, entry.skyLight)
 
     /** RGB colour (no alpha) for an entry, following the vanilla monster spawning rules. */
     fun colorOf(entry: Entry): Int = when {
