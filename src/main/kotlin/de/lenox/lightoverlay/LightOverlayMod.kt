@@ -22,15 +22,22 @@ object LightOverlayMod {
         while (LightOverlayKeys.toggle.consumeClick()) {
             LightOverlayConfig.enabled = !LightOverlayConfig.enabled
             LightOverlayConfig.save()
-            mc.player?.displayClientMessage(
-                Component.translatable(
-                    if (LightOverlayConfig.enabled) "lightoverlay.message.enabled" else "lightoverlay.message.disabled"
-                ),
-                true
+            val message = Component.translatable(
+                if (LightOverlayConfig.enabled) "lightoverlay.message.enabled" else "lightoverlay.message.disabled"
             )
+            //? if >=26.1 {
+            /*mc.player?.sendOverlayMessage(message)
+            *///?}
+            //? if <26.1 {
+            mc.player?.displayClientMessage(message, true)
+            //?}
         }
         while (LightOverlayKeys.openConfig.consumeClick()) {
+            //? if >=26.2 {
+            /*mc.gui.setScreen(LightOverlayConfigScreen.create(mc.gui.screen()))
+            *///?} else {
             mc.setScreen(LightOverlayConfigScreen.create(mc.screen))
+            //?}
         }
 
         val player = mc.player

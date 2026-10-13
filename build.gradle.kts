@@ -40,10 +40,8 @@ base {
 sourceSets {
     main {
         if (isFabric) {
-            kotlin.srcDir(rootProject.file("src/fabric/kotlin"))
             resources.srcDir(rootProject.file("src/fabric/resources"))
         } else if (isNeoForge) {
-            kotlin.srcDir(rootProject.file("src/neoforge/kotlin"))
             resources.srcDir(rootProject.file("src/neoforge/resources"))
         }
     }
@@ -376,7 +374,14 @@ publishMods {
         changelog.set("No changelog provided for this release.")
     }
 
-    type.set(me.modmuss50.mpp.ReleaseType.STABLE)
+    // RELEASE_TYPE (stable, beta, alpha) is set by the release workflow
+    type.set(
+        when (providers.environmentVariable("RELEASE_TYPE").getOrElse("stable").lowercase()) {
+            "beta" -> me.modmuss50.mpp.ReleaseType.BETA
+            "alpha" -> me.modmuss50.mpp.ReleaseType.ALPHA
+            else -> me.modmuss50.mpp.ReleaseType.STABLE
+        }
+    )
     displayName.set("mc$mcVersion-$modVersion-$loader")
 
     // Project ids are set once the Modrinth / CurseForge projects exist (`modrinth_id` / `curseforge_id`).

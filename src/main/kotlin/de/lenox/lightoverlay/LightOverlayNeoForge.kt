@@ -1,6 +1,6 @@
-package de.lenox.lightoverlay
+//? if neoforge {
+/*package de.lenox.lightoverlay
 
-import com.mojang.blaze3d.vertex.PoseStack
 import net.minecraft.client.Minecraft
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.bus.api.SubscribeEvent
@@ -10,7 +10,12 @@ import net.neoforged.fml.common.Mod
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent
 import net.neoforged.neoforge.client.event.ClientTickEvent
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent
+//? if >=26.2 {
+/*import net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent
+*///?} else {
+import com.mojang.blaze3d.vertex.PoseStack
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent
+//?}
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory
 
 @Mod(LightOverlayMod.MOD_ID, dist = [Dist.CLIENT])
@@ -41,14 +46,26 @@ object LightOverlayNeoForgeEvents {
         LightOverlayMod.onClientTick(Minecraft.getInstance())
     }
 
+    //? if >=26.2 {
+    /*@SubscribeEvent
+    fun onSubmitGeometry(event: SubmitCustomGeometryEvent) {
+        LightOverlayRenderer.render(
+            event.poseStack,
+            event.levelRenderState.cameraRenderState.pos,
+            event.submitNodeCollector
+        )
+    }
+    *///?} else {
     @SubscribeEvent
     fun onRenderLevel(event: RenderLevelStageEvent.AfterTranslucentBlocks) {
         val buffers = Minecraft.getInstance().renderBuffers().bufferSource()
         LightOverlayRenderer.render(
-            event.poseStack ?: PoseStack(),
+            event.poseStack,
             event.levelRenderState.cameraRenderState.pos,
             buffers
         )
         buffers.endBatch()
     }
+    //?}
 }
+*///?}

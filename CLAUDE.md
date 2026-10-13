@@ -18,7 +18,7 @@ The build setup mirrors [no-fog-perfected](https://github.com/L3-N0X/no-fog-perf
 ./gradlew :1.21.11-fabric:runClient   # launch a dev client for that combo
 ```
 
-There are **no tests**; CI (`.github/workflows/build.yml`) runs `./gradlew build` on JDK 25.
+There are **no tests**; CI (`.github/workflows/build.yml`) runs `./gradlew build` on JDK 25. Gradle itself needs JDK 21+ (Stonecutter), so make sure `JAVA_HOME` / `org.gradle.java.home` doesn't point at an older JDK.
 
 The **active version** is set in `stonecutter.gradle.kts` (`stonecutter active "1.21.11-fabric"`). Source files on disk are chiseled in place for the active version, so a `git diff` after switching versions is expected noise. Commit with 1.21.11-fabric active.
 
@@ -40,8 +40,8 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper
 ## Source layout
 
 - `src/main/kotlin`: always compiled. `LightOverlayConfig` (GSON, `config/lightoverlay.json`), `LightOverlayConfigScreen` (YACL), `LightOverlayKeys`, `LightScanner` (collects floor positions + light levels each N ticks), `LightOverlayRenderer` (draws the numbers), `LightOverlayMod` (shared tick handler).
-- `src/fabric/**`: `LightOverlayFabric` (`ClientModInitializer`), `fabric.mod.json`.
-- `src/neoforge/**`: `LightOverlayNeoForge` (`@Mod` + `@EventBusSubscriber`, config screen via `IConfigScreenFactory`), `neoforge.mods.toml`.
+- `src/main/kotlin/.../LightOverlayFabric.kt` and `LightOverlayNeoForge.kt`: the loader entrypoints, wrapped in `//? if fabric {` / `//? if neoforge {` so each only compiles for its loader. They live in `src/main` on purpose: Stonecutter only chisels `src/main`, so version-conditional code in `src/fabric/kotlin` or `src/neoforge/kotlin` would never switch per version.
+- `src/fabric/resources` (`fabric.mod.json`), `src/neoforge/resources` (`neoforge.mods.toml`): loader metadata only, no code.
 
 The loader entrypoints only adapt events to the shared code: client tick → `LightOverlayMod.onClientTick`, world render → `LightOverlayRenderer.render(poseStack, cameraPos, buffers)`.
 
@@ -51,10 +51,15 @@ Adding a Minecraft version means adding a branch to every `when (mcVersion)` blo
 
 - 1.21.11 uses `fabric-loom` with Mojang mappings, `modImplementation` and `remapJar`; 26.1+ uses `net.fabricmc.fabric-loom` with plain `implementation` and a non-remapped `jar`.
 - Fabric API renamed its APIs in 26.1: `KeyBindingHelper` → `KeyMappingHelper` (`fabric-key-mapping-api-v1`), `WorldRenderEvents`/`WorldRenderContext` → `LevelRenderEvents`/`LevelRenderContext` (`...rendering.v1.level`). `LightOverlayFabric` switches between them.
-- NeoForge render hook is `RenderLevelStageEvent.AfterTranslucentBlocks`, which exists on 1.21.11 and 26.x.
-- YACL artifacts are `dev.isxander:yet-another-config-lib:<yacl>+<mc>-<loader>` from `maven.isxander.dev`. The 26.x YACL versions were picked from release listings and have not been build-verified yet.
+- Minecraft 26.1 renamed `displayClientMessage` to `sendOverlayMessage`. 26.2 moved `setScreen`/`screen` from `Minecraft` to `mc.gui`, and replaced `MultiBufferSource`/`Font.drawInBatch` with `SubmitNodeCollector.submitText`. 26.3 dropped `PoseStack.mulPose(Quaternionf)` (use `rotateDegrees`) and `InputConstants.Type.KEYSYM`/LWJGL GLFW constants (use the 3-arg `KeyMapping` constructor and `InputConstants.KEY_F7`).
+- Render hooks: before 26.2 the renderer draws into a buffer source (Fabric `WorldRenderEvents.BEFORE_TRANSLUCENT` / `LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN`, NeoForge `RenderLevelStageEvent.AfterTranslucentBlocks` plus `endBatch()`). From 26.2 on it submits into the level's `SubmitNodeCollector` (Fabric `LevelRenderEvents.COLLECT_SUBMITS`, NeoForge `SubmitCustomGeometryEvent`). The 26.2+ path compiles but has not been checked in-game.
+- YACL artifacts are `dev.isxander:yet-another-config-lib:<yacl>+<mc>-<loader>` from `maven.isxander.dev`.
 - Kotlin for Forge 6.3.0 caps Minecraft at `<26.3`, so NeoForge 26.3 goes through `kffNeedsPatch` → `unzipKff` → `patchKotlinForForge`.
 
 ## Light rules
 
 `LightScanner.colorOf`: block light > 0 → safe; block light 0 and raw sky light > 7 → spawns at night only; otherwise → spawns at any time (hostile mobs need block light 0 since 1.18).
+
+## Publishing
+
+`.github/workflows/release.yml` runs `./gradlew publishMods` for all 8 combos when a tag (`v*` or `*.*.*`) is pushed, or manually via `workflow_dispatch` with a release type (stable/beta/alpha, passed as `RELEASE_TYPE`). The `publishMods` block in `build.gradle.kts` uploads to Modrinth / CurseForge only when **both** the token (`MODRINTH_TOKEN` / `CURSEFORGE_TOKEN` repo secret) and the project id (`modrinth_id` / `curseforge_id` in `gradle.properties`) are set; otherwise the task does nothing. The release notes are `CHANGELOG.md`. Test with `DRY_RUN=1 ./gradlew publishMods`.

@@ -3,7 +3,6 @@ package de.lenox.lightoverlay
 import com.mojang.blaze3d.platform.InputConstants
 import net.minecraft.client.KeyMapping
 import net.minecraft.resources.Identifier
-import org.lwjgl.glfw.GLFW
 
 object LightOverlayKeys {
     private val categoryId: Identifier = Identifier.fromNamespaceAndPath(LightOverlayMod.MOD_ID, "main")
@@ -19,13 +18,15 @@ object LightOverlayKeys {
 
     val toggle: KeyMapping = KeyMapping(
         "key.${LightOverlayMod.MOD_ID}.toggle",
+        //? if <26.3
         InputConstants.Type.KEYSYM,
-        GLFW.GLFW_KEY_F7,
+        InputConstants.KEY_F7,
         category
     )
 
     val openConfig: KeyMapping = KeyMapping(
         "key.${LightOverlayMod.MOD_ID}.config",
+        //? if <26.3
         InputConstants.Type.KEYSYM,
         InputConstants.UNKNOWN.value,
         category

@@ -1,3 +1,4 @@
+//? if fabric {
 package de.lenox.lightoverlay
 
 import com.terraformersmc.modmenu.api.ConfigScreenFactory
@@ -8,3 +9,4 @@ class LightOverlayModMenu : ModMenuApi {
     override fun getModConfigScreenFactory(): ConfigScreenFactory<*> =
         ConfigScreenFactory { parent -> LightOverlayConfigScreen.create(parent) }
 }
+//?}

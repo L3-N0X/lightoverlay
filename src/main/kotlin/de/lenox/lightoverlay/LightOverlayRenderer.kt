@@ -5,9 +5,16 @@ import com.mojang.blaze3d.vertex.VertexConsumer
 import com.mojang.math.Axis
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.Font
+//? if >=26.2 {
+/*import net.minecraft.client.renderer.SubmitNodeCollector
+import net.minecraft.network.chat.Component
+*///?} else {
 import net.minecraft.client.renderer.MultiBufferSource
+//?}
+//? if <26.2 {
 import net.minecraft.client.renderer.rendertype.RenderTypes
 import net.minecraft.core.Direction
+//?}
 import net.minecraft.world.phys.Vec3
 
 /** Draws the light level indicators flat on top of the scanned floor blocks. */
@@ -29,15 +36,20 @@ object LightOverlayRenderer {
     /**
      * @param poseStack the world pose stack of the current frame (camera rotation applied, not translation)
      * @param cameraPos camera position used to make vertex coordinates camera-relative
-     * @param buffers buffer source to submit into; the caller is responsible for flushing it
+     * @param buffers where to draw: a buffer source the caller flushes (before 26.2), or the level's submit node collector
      */
+    //? if >=26.2 {
+    /*fun render(poseStack: PoseStack, cameraPos: Vec3, buffers: SubmitNodeCollector) {
+    *///?} else {
     fun render(poseStack: PoseStack, cameraPos: Vec3, buffers: MultiBufferSource) {
+    //?}
         if (!LightOverlayMod.active) return
         val entries = LightScanner.entries
         if (entries.isEmpty()) return
 
         val font = Minecraft.getInstance().font
         val mode = LightOverlayConfig.displayMode
+        //? if <26.2 {
         val skirts = LightOverlayConfig.skirtsEnabled
         val skirtHeight = LightOverlayConfig.skirtHeight
         val quads = if (mode == DisplayMode.CROSS || mode == DisplayMode.SQUARE || skirts) {
@@ -45,6 +57,7 @@ object LightOverlayRenderer {
         } else {
             null
         }
+        //?}
 
         for (entry in entries) {
             val color = LightScanner.colorOf(entry)
@@ -54,7 +67,9 @@ object LightOverlayRenderer {
 
             // The top of a floor above the camera can't be seen, so mark its open edges instead.
             if (entry.y > cameraPos.y) {
+                //? if <26.2 {
                 if (skirts && entry.edges != 0) drawSkirts(quads!!, poseStack.last(), entry.edges, skirtHeight, color)
+                //?}
                 poseStack.popPose()
                 continue
             }
@@ -67,19 +82,47 @@ object LightOverlayRenderer {
                     poseStack.translate(DAY_NUMBER_OFFSET, 0f, DAY_NUMBER_OFFSET)
                     drawNumber(font, poseStack, buffers, LightScanner.dayLightOf(entry), color, SMALL_TEXT_SCALE)
                 }
+                //? if <26.2 {
                 DisplayMode.CROSS -> drawCross(quads!!, poseStack.last(), color)
                 DisplayMode.SQUARE -> drawSquare(quads!!, poseStack.last(), color)
+                //?}
+                //? if >=26.2 {
+                /*else -> Unit
+                *///?}
             }
             poseStack.popPose()
         }
     }
 
     /** Draws [value] centred at the current origin, flat on the floor and readable from above. */
+    //? if >=26.2 {
+    /*private fun drawNumber(font: Font, poseStack: PoseStack, buffers: SubmitNodeCollector, value: Int, color: Int, scale: Float) {
+    *///?} else {
     private fun drawNumber(font: Font, poseStack: PoseStack, buffers: MultiBufferSource, value: Int, color: Int, scale: Float) {
+    //?}
         val text = value.toString()
         poseStack.pushPose()
+        // Lay the text flat on the floor, readable from above.
+        //? if >=26.3 {
+        /*poseStack.rotateDegrees(Axis.XP, 90f)
+        *///?} else {
         poseStack.mulPose(Axis.XP.rotationDegrees(90f))
+        //?}
         poseStack.scale(scale, scale, scale)
+        //? if >=26.2 {
+        /*buffers.submitText(
+            poseStack,
+            -font.width(text) / 2f,
+            -font.lineHeight / 2f,
+            Component.literal(text).visualOrderText,
+            false,
+            Font.DisplayMode.POLYGON_OFFSET,
+            FULL_BRIGHT,
+            0xFF000000.toInt() or color,
+            0,
+            0
+        )
+        *///?} else {
         font.drawInBatch(
             text,
             -font.width(text) / 2f,
@@ -92,9 +135,11 @@ object LightOverlayRenderer {
             0,
             FULL_BRIGHT
         )
+        //?}
         poseStack.popPose()
     }
 
+    //? if <26.2 {
     /** Two diagonal bars from corner to corner, centred at the current origin. */
     private fun drawCross(quads: VertexConsumer, pose: PoseStack.Pose, color: Int) {
         val argb = (SHAPE_ALPHA shl 24) or color
@@ -143,4 +188,5 @@ object LightOverlayRenderer {
             quads.addVertex(pose, x1, height, z1).setColor(color)
         }
     }
+    //?}
 }
