@@ -32,5 +32,22 @@ object LightOverlayKeys {
         category
     )
 
-    val all: List<KeyMapping> get() = listOf(toggle, openConfig)
+    val cycleTorchHelper: KeyMapping = KeyMapping(
+        "key.${LightOverlayMod.MOD_ID}.cycle_torch_helper",
+        //? if <26.3
+        InputConstants.Type.KEYSYM,
+        InputConstants.UNKNOWN.value,
+        category
+    )
+
+    /** Pins the torch grid to the looked-at block. Can be bound to a mouse button to pin by clicking. */
+    val pinGrid: KeyMapping = KeyMapping(
+        "key.${LightOverlayMod.MOD_ID}.pin_grid",
+        //? if <26.3
+        InputConstants.Type.KEYSYM,
+        InputConstants.KEY_G,
+        category
+    )
+
+    val all: List<KeyMapping> get() = listOf(toggle, openConfig, cycleTorchHelper, pinGrid)
 }

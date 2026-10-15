@@ -46,11 +46,7 @@ object LightOverlayConfigScreen {
                         .name(tr("display_mode"))
                         .description(desc("display_mode"))
                         .binding(DisplayMode.NUMBER, { LightOverlayConfig.displayMode }, { LightOverlayConfig.displayMode = it })
-                        .controller {
-                            EnumControllerBuilder.create(it)
-                                .enumClass(DisplayMode::class.java)
-                                .formatValue { mode -> tr("display_mode.${mode.name.lowercase()}") }
-                        }
+                        .controller { enumController(it, DisplayMode::class.java, "display_mode") }
                         .build()
                 )
                 .option(
@@ -121,9 +117,94 @@ object LightOverlayConfigScreen {
                 )
                 .build()
         )
+        .category(
+            ConfigCategory.createBuilder()
+                .name(tr("category.torch_helper"))
+                .option(
+                    Option.createBuilder<TorchHelperMode>()
+                        .name(tr("torch_helper_mode"))
+                        .description(desc("torch_helper_mode"))
+                        .binding(TorchHelperMode.SMART, { LightOverlayConfig.torchHelperMode }, { LightOverlayConfig.torchHelperMode = it })
+                        .controller { enumController(it, TorchHelperMode::class.java, "torch_helper_mode") }
+                        .build()
+                )
+                .option(
+                    Option.createBuilder<Int>()
+                        .name(tr("min_light_level"))
+                        .description(desc("min_light_level"))
+                        .binding(1, { LightOverlayConfig.minLightLevel }, { LightOverlayConfig.minLightLevel = it })
+                        .controller { IntegerSliderControllerBuilder.create(it).range(1, 15).step(1) }
+                        .build()
+                )
+                .option(
+                    Option.createBuilder<Boolean>()
+                        .name(tr("show_coverage_preview"))
+                        .description(desc("show_coverage_preview"))
+                        .binding(true, { LightOverlayConfig.showCoveragePreview }, { LightOverlayConfig.showCoveragePreview = it })
+                        .controller { TickBoxControllerBuilder.create(it) }
+                        .build()
+                )
+                .option(colorOption("indicator_color", LightOverlayConfig.DEFAULT_INDICATOR_COLOR, { LightOverlayConfig.indicatorColor }, { LightOverlayConfig.indicatorColor = it }))
+                .group(
+                    OptionGroup.createBuilder()
+                        .name(tr("group.smart"))
+                        .option(
+                            Option.createBuilder<Int>()
+                                .name(tr("suggestion_count"))
+                                .description(desc("suggestion_count"))
+                                .binding(3, { LightOverlayConfig.suggestionCount }, { LightOverlayConfig.suggestionCount = it })
+                                .controller { IntegerSliderControllerBuilder.create(it).range(1, 8).step(1) }
+                                .build()
+                        )
+                        .option(
+                            Option.createBuilder<Int>()
+                                .name(tr("look_ahead"))
+                                .description(desc("look_ahead"))
+                                .binding(8, { LightOverlayConfig.lookAhead }, { LightOverlayConfig.lookAhead = it })
+                                .controller { IntegerSliderControllerBuilder.create(it).range(0, 16).step(1) }
+                                .build()
+                        )
+                        .build()
+                )
+                .group(
+                    OptionGroup.createBuilder()
+                        .name(tr("group.grid"))
+                        .option(
+                            Option.createBuilder<GridPattern>()
+                                .name(tr("grid_pattern"))
+                                .description(desc("grid_pattern"))
+                                .binding(GridPattern.DIAMOND, { LightOverlayConfig.gridPattern }, { LightOverlayConfig.gridPattern = it })
+                                .controller { enumController(it, GridPattern::class.java, "grid_pattern") }
+                                .build()
+                        )
+                        .option(
+                            Option.createBuilder<GridAnchor>()
+                                .name(tr("grid_anchor"))
+                                .description(desc("grid_anchor"))
+                                .binding(GridAnchor.NEWEST_TORCH, { LightOverlayConfig.gridAnchor }, { LightOverlayConfig.gridAnchor = it })
+                                .controller { enumController(it, GridAnchor::class.java, "grid_anchor") }
+                                .build()
+                        )
+                        .option(
+                            Option.createBuilder<Int>()
+                                .name(tr("grid_margin"))
+                                .description(desc("grid_margin"))
+                                .binding(0, { LightOverlayConfig.gridMargin }, { LightOverlayConfig.gridMargin = it })
+                                .controller { IntegerSliderControllerBuilder.create(it).range(0, 6).step(1) }
+                                .build()
+                        )
+                        .build()
+                )
+                .build()
+        )
         .save { LightOverlayConfig.save() }
         .build()
         .generateScreen(parent)
+
+    private fun <E : Enum<E>> enumController(option: Option<E>, enumClass: Class<E>, key: String) =
+        EnumControllerBuilder.create(option)
+            .enumClass(enumClass)
+            .formatValue { value -> tr("$key.${value.name.lowercase()}") }
 
     private fun colorOption(key: String, default: Int, get: () -> Int, set: (Int) -> Unit): Option<Color> =
         Option.createBuilder<Color>()
