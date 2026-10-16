@@ -63,6 +63,14 @@ object LightOverlayConfig {
     const val DEFAULT_DANGER_COLOR = 0xFF4040
     const val DEFAULT_SKIRT_HEIGHT = 0.5f
     const val DEFAULT_INDICATOR_COLOR = 0x40D0FF
+    const val DEFAULT_OUTSIDE_COLOR = 0x808080
+    const val DEFAULT_SPHERE_COLOR = 0xC080FF
+
+    /** Hostile mobs further away than this from every player despawn instantly. */
+    const val DESPAWN_RADIUS = 128
+
+    /** Hostile mobs can't spawn this close to a player. */
+    const val NO_SPAWN_RADIUS = 24
 
     var enabled: Boolean = false
     var showWhileHoldingTorch: Boolean = false
@@ -110,6 +118,21 @@ object LightOverlayConfig {
     /** RGB, no alpha. Colour of the torch helper markers. */
     var indicatorColor: Int = DEFAULT_INDICATOR_COLOR
 
+    /** Outer radius of the [FarmLock] spawn shell: the despawn sphere. */
+    var lockRadius: Int = DESPAWN_RADIUS
+
+    /** Inner radius of the [FarmLock] spawn shell, 0 to count everything up to [lockRadius]. */
+    var lockInnerRadius: Int = NO_SPAWN_RADIUS
+
+    /** Draw the [FarmLock] spheres. */
+    var showLockSphere: Boolean = true
+
+    /** RGB, no alpha. Floor outside the [FarmLock] spawn shell. */
+    var outsideColor: Int = DEFAULT_OUTSIDE_COLOR
+
+    /** RGB, no alpha. The [FarmLock] spheres. */
+    var sphereColor: Int = DEFAULT_SPHERE_COLOR
+
     fun init() {
         val mc = Minecraft.getInstance()
         configFile = File(mc.gameDirectory, "config/${LightOverlayMod.MOD_ID}.json")
@@ -146,6 +169,11 @@ object LightOverlayConfig {
             gridAnchor = data.gridAnchor ?: GridAnchor.NEWEST_TORCH
             gridMargin = data.gridMargin.coerceIn(0, 6)
             indicatorColor = data.indicatorColor
+            lockRadius = data.lockRadius.coerceIn(1, DESPAWN_RADIUS)
+            lockInnerRadius = data.lockInnerRadius.coerceIn(0, DESPAWN_RADIUS)
+            showLockSphere = data.showLockSphere
+            outsideColor = data.outsideColor
+            sphereColor = data.sphereColor
         } catch (e: Exception) {
             LightOverlayMod.LOGGER.warn("Failed to load light overlay config, using defaults", e)
         }
@@ -176,7 +204,12 @@ object LightOverlayConfig {
                 gridPattern = gridPattern,
                 gridAnchor = gridAnchor,
                 gridMargin = gridMargin,
-                indicatorColor = indicatorColor
+                indicatorColor = indicatorColor,
+                lockRadius = lockRadius,
+                lockInnerRadius = lockInnerRadius,
+                showLockSphere = showLockSphere,
+                outsideColor = outsideColor,
+                sphereColor = sphereColor
             )
             file.writeText(GSON.toJson(data))
         } catch (e: Exception) {
@@ -205,6 +238,11 @@ object LightOverlayConfig {
         val gridPattern: GridPattern? = GridPattern.DIAMOND,
         val gridAnchor: GridAnchor? = GridAnchor.NEWEST_TORCH,
         val gridMargin: Int = 0,
-        val indicatorColor: Int = DEFAULT_INDICATOR_COLOR
+        val indicatorColor: Int = DEFAULT_INDICATOR_COLOR,
+        val lockRadius: Int = DESPAWN_RADIUS,
+        val lockInnerRadius: Int = NO_SPAWN_RADIUS,
+        val showLockSphere: Boolean = true,
+        val outsideColor: Int = DEFAULT_OUTSIDE_COLOR,
+        val sphereColor: Int = DEFAULT_SPHERE_COLOR
     )
 }

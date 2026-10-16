@@ -154,7 +154,8 @@ object TorchPlanner {
             count = LightOverlayConfig.suggestionCount,
             pattern = LightOverlayConfig.gridPattern,
             reach = maxOf(1, emission - LightOverlayConfig.minLightLevel - LightOverlayConfig.gridMargin),
-            anchor = gridAnchor(snapshot, player.x, player.z)
+            anchor = gridAnchor(snapshot, player.x, player.z),
+            sphere = FarmLock.sphere
         )
         // Nothing changed since the last plan (e.g. standing still), it would come out the same.
         val key = request.copy(playerX = 0.0, playerY = 0.0, playerZ = 0.0)
@@ -274,7 +275,9 @@ object TorchPlanner {
         val pattern: GridPattern,
         /** Blocks a torch's light reaches on flat ground, the grid spacing follows from it. */
         val reach: Int,
-        val anchor: Pair<Int, Int>
+        val anchor: Pair<Int, Int>,
+        /** While locked, only dark floor inside the [FarmLock] spawn shell needs light. */
+        val sphere: FarmLock.Sphere?
     ) {
         fun inScanArea(x: Int, y: Int, z: Int): Boolean =
             abs(x - centerX) <= radius && abs(z - centerZ) <= radius && abs(y - centerY) <= vertical
@@ -301,6 +304,7 @@ object TorchPlanner {
             val weightList = ArrayList<Float>()
             for (cell in 0 until snapshot.cellCount) {
                 if (!snapshot.isFloor(cell) || snapshot.blockLight(cell) >= request.minLight) continue
+                if (request.sphere?.contains(snapshot.xOf(cell), snapshot.yOf(cell), snapshot.zOf(cell)) == false) continue
                 idOf[cell] = weightList.size
                 cellList.add(cell)
                 weightList.add(weightOf(cell))

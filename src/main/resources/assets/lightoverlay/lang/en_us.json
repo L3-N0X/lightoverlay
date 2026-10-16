@@ -4,12 +4,15 @@
   "key.lightoverlay.config": "Open Light Overlay Config",
   "key.lightoverlay.cycle_torch_helper": "Cycle Torch Helper Mode",
   "key.lightoverlay.pin_grid": "Pin Torch Grid to Looked-at Block",
+  "key.lightoverlay.lock_position": "Lock Overlay to Position (Farm Mode)",
 
   "lightoverlay.message.enabled": "Light overlay enabled",
   "lightoverlay.message.disabled": "Light overlay disabled",
   "lightoverlay.message.torch_helper": "Torch helper: %s",
   "lightoverlay.message.grid_pinned": "Torch grid pinned at %s, %s",
   "lightoverlay.message.grid_unpinned": "Torch grid unpinned",
+  "lightoverlay.message.locked": "Overlay locked at %s, %s, %s (radius %s)",
+  "lightoverlay.message.unlocked": "Overlay unlocked",
 
   "lightoverlay.config.title": "Light Overlay",
   "lightoverlay.config.category.general": "General",
@@ -74,5 +77,17 @@
   "lightoverlay.config.grid_anchor.nearest_torch": "Nearest torch",
   "lightoverlay.config.grid_anchor.newest_torch": "Newest torch",
   "lightoverlay.config.grid_margin": "Spacing Margin",
-  "lightoverlay.config.grid_margin.description": "Moves the grid spots closer together by this many blocks, to leave some slack for uneven ground."
+  "lightoverlay.config.grid_margin.description": "Moves the grid spots closer together by this many blocks, to leave some slack for uneven ground.",
+
+  "lightoverlay.config.category.farm_lock": "Farm Lock",
+  "lightoverlay.config.lock_radius": "Outer Radius",
+  "lightoverlay.config.lock_radius.description": "Bind the Lock Overlay to Position key and press it on your farm's AFK spot: the overlay stays on and only floor where mobs can spawn around that spot keeps its colors, the rest turns gray. The torch helper only plans for that floor. Press the key again to unlock.\n\nThis is the outer radius around the locked spot. 128 is the despawn sphere: hostile mobs further away despawn instantly and never spawn. Lower it to e.g. 32 to only look at the area where mobs don't despawn randomly, or to the size of your spawning platforms.",
+  "lightoverlay.config.lock_inner_radius": "Inner Radius",
+  "lightoverlay.config.lock_inner_radius.description": "Floor closer than this to the locked spot is grayed out too. 24 is vanilla's no-spawn sphere: hostile mobs never spawn that close to a player, so it doesn't need light. Set it to 0 to include everything up to the outer radius.",
+  "lightoverlay.config.show_lock_sphere": "Show Spheres",
+  "lightoverlay.config.show_lock_sphere.description": "While locked, draw the outer and inner sphere as a wireframe around the locked spot, and mark the spot itself.",
+  "lightoverlay.config.sphere_color": "Sphere Color",
+  "lightoverlay.config.sphere_color.description": "Color of the spheres and the locked spot marker.",
+  "lightoverlay.config.outside_color": "Outside Color",
+  "lightoverlay.config.outside_color.description": "Color of the floor outside the spawn area while locked: further than the outer radius or closer than the inner radius."
 }

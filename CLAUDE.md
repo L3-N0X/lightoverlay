@@ -57,6 +57,10 @@ Adding a Minecraft version means adding a branch to every `when (mcVersion)` blo
 - YACL artifacts are `dev.isxander:yet-another-config-lib:<yacl>+<mc>-<loader>` from `maven.isxander.dev`.
 - Kotlin for Forge 6.3.0 caps Minecraft at `<26.3`, so NeoForge 26.3 goes through `kffNeedsPatch` → `unzipKff` → `patchKotlinForForge`.
 
+## Farm lock
+
+`FarmLock` holds a runtime-only locked player position (key `lockPosition`, unbound; cleared on level change) and keeps the overlay active while set. `FarmLock.Sphere.contains` mirrors the vanilla spawner distance check (block centre at feet height, `innerRadius² < d² <= radius²`, defaults 24 / 128). `LightScanner.colorOf` grays out entries outside it, `TorchPlanner.Targets` skips dark floor outside it, and `FarmLockRenderer` draws the spheres in the same `debugQuads` pass.
+
 ## Light rules
 
 `LightScanner.colorOf`: block light > 0 → safe; block light 0 and raw sky light > 7 → spawns at night only; otherwise → spawns at any time (hostile mobs need block light 0 since 1.18).

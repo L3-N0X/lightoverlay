@@ -44,22 +44,25 @@ object LightOverlayRenderer {
         if (!LightOverlayMod.active) return
         val entries = LightScanner.entries
         val plan = TorchPlanner.plan
-        if (entries.isEmpty() && plan.isEmpty) return
+        val sphere = FarmLock.sphere?.takeIf { LightOverlayConfig.showLockSphere }
+        if (entries.isEmpty() && plan.isEmpty && sphere == null) return
 
         val mode = LightOverlayConfig.displayMode
         val skirts = LightOverlayConfig.skirtsEnabled
         val shapes = mode == DisplayMode.CROSS || mode == DisplayMode.SQUARE || skirts
-        if (shapes || !plan.isEmpty) {
+        if (shapes || !plan.isEmpty || sphere != null) {
             val skirtHeight = LightOverlayConfig.skirtHeight
             //? if >=26.2 {
             /*buffers.submitCustomGeometry(poseStack, RenderTypes.debugQuads()) { pose, quads ->
                 if (shapes) drawQuads(quads, pose, entries, cameraPos, mode, skirts, skirtHeight)
                 TorchHelperRenderer.draw(quads, pose, plan, cameraPos)
+                if (sphere != null) FarmLockRenderer.draw(quads, pose, sphere, cameraPos)
             }
             *///?} else {
             val quads = buffers.getBuffer(RenderTypes.debugQuads())
             if (shapes) drawQuads(quads, poseStack.last(), entries, cameraPos, mode, skirts, skirtHeight)
             TorchHelperRenderer.draw(quads, poseStack.last(), plan, cameraPos)
+            if (sphere != null) FarmLockRenderer.draw(quads, poseStack.last(), sphere, cameraPos)
             //?}
         }
         if (mode != DisplayMode.NUMBER && mode != DisplayMode.NUMBER_DAY_NIGHT) return

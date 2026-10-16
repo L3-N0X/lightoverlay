@@ -85,8 +85,12 @@ object LightScanner {
     /** Light level during the day: the raw sky light is only darkened at night. */
     fun dayLightOf(entry: Entry): Int = maxOf(entry.blockLight, entry.skyLight)
 
-    /** RGB colour (no alpha) for an entry, following the vanilla monster spawning rules. */
-    fun colorOf(entry: Entry): Int = when {
+    /**
+     * RGB colour (no alpha) for an entry, following the vanilla monster spawning rules. While [FarmLock] is locked,
+     * entries outside its spawn shell can't spawn anything and get the outside colour.
+     */
+    fun colorOf(entry: Entry, sphere: FarmLock.Sphere? = FarmLock.sphere): Int = when {
+        sphere != null && !sphere.contains(entry.x, entry.y, entry.z) -> LightOverlayConfig.outsideColor
         entry.blockLight > 0 -> LightOverlayConfig.safeColor
         entry.skyLight > MAX_SPAWN_SKY_LIGHT -> LightOverlayConfig.warningColor
         else -> LightOverlayConfig.dangerColor

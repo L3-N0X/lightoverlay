@@ -49,5 +49,14 @@ object LightOverlayKeys {
         category
     )
 
-    val all: List<KeyMapping> get() = listOf(toggle, openConfig, cycleTorchHelper, pinGrid)
+    /** Locks the overlay to the player's position, see [FarmLock]. */
+    val lockPosition: KeyMapping = KeyMapping(
+        "key.${LightOverlayMod.MOD_ID}.lock_position",
+        //? if <26.3
+        InputConstants.Type.KEYSYM,
+        InputConstants.UNKNOWN.value,
+        category
+    )
+
+    val all: List<KeyMapping> get() = listOf(toggle, openConfig, cycleTorchHelper, pinGrid, lockPosition)
 }

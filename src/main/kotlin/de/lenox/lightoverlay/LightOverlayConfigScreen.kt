@@ -197,6 +197,37 @@ object LightOverlayConfigScreen {
                 )
                 .build()
         )
+        .category(
+            ConfigCategory.createBuilder()
+                .name(tr("category.farm_lock"))
+                .option(
+                    Option.createBuilder<Int>()
+                        .name(tr("lock_radius"))
+                        .description(desc("lock_radius"))
+                        .binding(LightOverlayConfig.DESPAWN_RADIUS, { LightOverlayConfig.lockRadius }, { LightOverlayConfig.lockRadius = it })
+                        .controller { IntegerSliderControllerBuilder.create(it).range(1, LightOverlayConfig.DESPAWN_RADIUS).step(1) }
+                        .build()
+                )
+                .option(
+                    Option.createBuilder<Int>()
+                        .name(tr("lock_inner_radius"))
+                        .description(desc("lock_inner_radius"))
+                        .binding(LightOverlayConfig.NO_SPAWN_RADIUS, { LightOverlayConfig.lockInnerRadius }, { LightOverlayConfig.lockInnerRadius = it })
+                        .controller { IntegerSliderControllerBuilder.create(it).range(0, LightOverlayConfig.DESPAWN_RADIUS).step(1) }
+                        .build()
+                )
+                .option(
+                    Option.createBuilder<Boolean>()
+                        .name(tr("show_lock_sphere"))
+                        .description(desc("show_lock_sphere"))
+                        .binding(true, { LightOverlayConfig.showLockSphere }, { LightOverlayConfig.showLockSphere = it })
+                        .controller { TickBoxControllerBuilder.create(it) }
+                        .build()
+                )
+                .option(colorOption("sphere_color", LightOverlayConfig.DEFAULT_SPHERE_COLOR, { LightOverlayConfig.sphereColor }, { LightOverlayConfig.sphereColor = it }))
+                .option(colorOption("outside_color", LightOverlayConfig.DEFAULT_OUTSIDE_COLOR, { LightOverlayConfig.outsideColor }, { LightOverlayConfig.outsideColor = it }))
+                .build()
+        )
         .save { LightOverlayConfig.save() }
         .build()
         .generateScreen(parent)

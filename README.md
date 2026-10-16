@@ -19,6 +19,12 @@ While the overlay is shown, the torch helper marks where to place your next torc
 
 The torch's light level comes from the light source in your hand, so a soul torch or lantern is planned with its own range. **Cycle Torch Helper Mode** switches between off, smart and grid (unbound by default).
 
+## Farm Lock
+
+Building a mob farm? Bind **Lock Overlay to Position (Farm Mode)** (unbound by default) and press it where you'll AFK. The overlay is locked to that spot, like MiniHUD's fixed overlays: it stays on while you walk around, and only floor where hostile mobs could actually spawn while you stand there keeps its colors, i.e. further than 24 blocks (no-spawn sphere) and at most 128 blocks (despawn sphere) away. Everything outside that shell is drawn gray, so whatever is still yellow or red needs lighting. Both spheres are drawn as a wireframe around the locked spot, and the torch helper only suggests torches for floor inside them.
+
+Both radii can be changed in the **Farm Lock** config category, e.g. an outer radius of 32 for the area where mobs never despawn randomly. Press the key again to unlock; changing worlds or dimensions unlocks as well.
+
 ## Supported Versions
 
 | Minecraft Version | Fabric | NeoForge |
@@ -43,4 +49,5 @@ Settings live in a YACL config screen. Open it with the **Open Light Overlay Con
 - Hide safe blocks
 - Horizontal and vertical scan radius, scan interval
 - Colors for the three categories
+- Farm lock: outer and inner radius, sphere visibility, sphere and outside colors
 - Torch helper: mode, minimum light level, number of suggestions, look-ahead, coverage preview, grid pattern / alignment / spacing margin, helper color

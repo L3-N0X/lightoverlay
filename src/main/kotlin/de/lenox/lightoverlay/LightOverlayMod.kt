@@ -12,7 +12,7 @@ object LightOverlayMod {
     const val MOD_ID = "lightoverlay"
     val LOGGER = LoggerFactory.getLogger(MOD_ID)
 
-    /** Whether the overlay is currently shown: toggled on, or a torch is held with the torch mode enabled. */
+    /** Whether the overlay is currently shown: toggled on, locked with [FarmLock], or a torch is held with the torch mode enabled. */
     @Volatile
     var active: Boolean = false
         private set
@@ -31,6 +31,7 @@ object LightOverlayMod {
         }
         while (LightOverlayKeys.cycleTorchHelper.consumeClick()) showMessage(mc, TorchPlanner.cycleMode())
         while (LightOverlayKeys.pinGrid.consumeClick()) showMessage(mc, TorchPlanner.togglePin(mc))
+        while (LightOverlayKeys.lockPosition.consumeClick()) showMessage(mc, FarmLock.toggle(mc))
         while (LightOverlayKeys.openConfig.consumeClick()) {
             //? if >=26.2 {
             /*mc.gui.setScreen(LightOverlayConfigScreen.create(mc.gui.screen()))
@@ -39,8 +40,9 @@ object LightOverlayMod {
             //?}
         }
 
+        FarmLock.tick(mc)
         val player = mc.player
-        active = LightOverlayConfig.enabled ||
+        active = LightOverlayConfig.enabled || FarmLock.locked ||
             (LightOverlayConfig.showWhileHoldingTorch && player != null && isHoldingTorch(player))
 
         LightScanner.tick(mc)
