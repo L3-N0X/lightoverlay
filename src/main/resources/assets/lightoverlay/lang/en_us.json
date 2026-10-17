@@ -64,7 +64,7 @@
   "lightoverlay.config.suggestion_count": "Suggested Torches",
   "lightoverlay.config.suggestion_count.description": "How many torch spots are shown at once. The plan covers all dark floor in range; these are the spots that light the dark floor closest to you, the first one is the next torch.",
   "lightoverlay.config.look_ahead": "Look-Ahead",
-  "lightoverlay.config.look_ahead.description": "How many blocks beyond the scan radius are taken into account. Torches are still only suggested within the scan radius, but they also light up dark floor beyond it, so a spot near the edge can be the better choice. The planner covers at most 24 blocks around you, plus the look-ahead.",
+  "lightoverlay.config.look_ahead.description": "How many blocks beyond the scan radius are taken into account, twice as many in the direction you walk. Smart mode plans torches for the dark floor within the scan radius, but they can stand beyond it, so a dark area at the edge gets its torch in the middle rather than on its border. The more you look ahead, the earlier the suggestions settle. The planner covers at most 24 blocks around you, plus the look-ahead.",
   "lightoverlay.config.group.grid": "Grid",
   "lightoverlay.config.grid_pattern": "Pattern",
   "lightoverlay.config.grid_pattern.description": "How the grid spots are laid out. The spacing follows from the torch's light level and the minimum light level, so on flat ground every block ends up lit.\n\nDiamond: a tilted lattice whose light diamonds fit together without overlap, the fewest torches possible.\nStaggered rows: rows of torches, every other row shifted by half a gap. Nearly as efficient and easier to follow.\nSquare: a plain square grid, about twice as many torches.",

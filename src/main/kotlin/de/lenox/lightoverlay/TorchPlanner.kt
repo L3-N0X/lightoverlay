@@ -13,20 +13,24 @@ import java.util.concurrent.Future
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
  * Works out where the next torches should go, see [TorchHelperMode].
  *
  * Every few ticks the client thread copies the blocks around the player into a [LightSnapshot] (the scan radius plus
- * [LightOverlayConfig.lookAhead]), and a background thread turns it into a [Plan]: it simulates the light of a torch
- * on every candidate floor and lets [TorchOptimizer] pick positions that light up all of it, or it lays a
- * [GridPattern] over the floor. Dark floor in the look-ahead area counts half, so torches near the edge of the scan
- * area also make use of the dark beyond it, without the suggestions drifting out of view.
+ * [LightOverlayConfig.lookAhead], and the look-ahead once more in the direction the player walks), and a background
+ * thread turns it into a [Plan]: it simulates the light of a torch on every candidate floor and lets [TorchOptimizer]
+ * pick positions that light up all dark floor in the scan area, or it lays a [GridPattern] over the floor. Torches
+ * may go beyond the scan area as far as their light reaches back into it, so the next torch into a dark area goes
+ * into its middle rather than on its edge.
  *
- * Smart mode remembers its positions (within [MEMORY_RADIUS]) and keeps them while they're still useful, so the
- * suggestions stay put while the player moves and come back the same when the player returns. The next torch is the
- * one that lights the dark floor closest to the player, counted in steps around walls.
+ * Smart mode remembers its settled positions (within [MEMORY_RADIUS]) and keeps them while they're still useful, so
+ * the suggestions stay put while the player moves and come back the same when the player returns. Positions that
+ * depend on floor beyond the snapshot are provisional: they are planned again every time, but stick to where they
+ * were unless a clearly better one turns up, and settle once the player comes close enough to see all of it. The
+ * next torch is the one that lights the dark floor closest to the player, counted in steps around walls.
  */
 object TorchPlanner {
     enum class SpotKind {
@@ -61,12 +65,20 @@ object TorchPlanner {
     private const val MAX_RADIUS = 24
     private const val MAX_VERTICAL_RADIUS = 12
     private const val MAX_VERTICAL_LOOK_AHEAD = 4
-    private const val MIN_INTERVAL_TICKS = 10
 
-    /** Weight of dark floor outside the scan area, compared to 1 inside. */
-    private const val LOOK_AHEAD_WEIGHT = 0.5f
+    /** Ticks between plans, independent of the overlay's update interval so the suggestions keep up with walking. */
+    private const val PLAN_INTERVAL_TICKS = 5
 
-    /** Score taken off per block of distance to the player, only breaks ties (the smallest weight is 0.5). */
+    /** How fast the walking direction follows the player's movement, per tick. */
+    private const val HEADING_SMOOTHING = 0.15
+
+    /** Below this smoothed speed (blocks per tick, walking is about 0.22) the player counts as standing still. */
+    private const val MIN_HEADING_SPEED = 0.05
+
+    /** Moves further than this within a tick (squared) are teleports and reset the walking direction. */
+    private const val TELEPORT_DISTANCE_SQ = 16.0
+
+    /** Score taken off per block of distance to the player, only breaks ties (every dark floor counts 1). */
     private const val DISTANCE_PENALTY = 0.01f
 
     /** New smart positions per plan, the closest dark floor gets them first. */
@@ -100,13 +112,24 @@ object TorchPlanner {
     @Volatile
     private var generation = 0
 
-    /** The last smart plan, only touched by the planner thread. Belongs to a [generation], older ones are ignored. */
-    private class Memory(val generation: Int, val spots: List<Remembered>, val next: Long?)
+    /**
+     * The last smart plan, only touched by the planner thread. Belongs to a [generation], older ones are ignored.
+     *
+     * @param spots the settled positions
+     * @param provisional the provisional positions ([BlockPos.asLong]), see [TorchOptimizer.Candidate.sticky]
+     */
+    private class Memory(val generation: Int, val spots: List<Remembered>, val provisional: Set<Long>, val next: Long?)
 
     /** A smart position ([BlockPos.asLong]) and the gain it had when it was picked. */
     private class Remembered(val pos: Long, val gain: Float)
 
-    private var memory = Memory(-1, emptyList(), null)
+    private var memory = Memory(-1, emptyList(), emptySet(), null)
+
+    /** The player's smoothed movement per tick, see [trackHeading]. */
+    private var headingX = 0.0
+    private var headingZ = 0.0
+    private var lastPlayerX = Double.NaN
+    private var lastPlayerZ = Double.NaN
 
     private val executor: ExecutorService = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "Light Overlay torch planner").apply { isDaemon = true }
@@ -120,25 +143,35 @@ object TorchPlanner {
             pinned = null
             generation++
             forgetTorches()
+            lastPlayerX = Double.NaN
         }
         val mode = LightOverlayConfig.torchHelperMode
         if (!LightOverlayMod.active || mode == TorchHelperMode.OFF || level == null || player == null) {
             clear()
             return
         }
+        trackHeading(player.x, player.z)
 
         if (--ticksUntilPlan > 0 || job?.isDone == false) return
-        ticksUntilPlan = maxOf(LightOverlayConfig.updateIntervalTicks, MIN_INTERVAL_TICKS)
+        ticksUntilPlan = PLAN_INTERVAL_TICKS
 
         val center = player.blockPosition()
         val radius = minOf(LightOverlayConfig.horizontalRadius, MAX_RADIUS)
         val vertical = minOf(LightOverlayConfig.verticalRadius, MAX_VERTICAL_RADIUS)
         val lookAhead = LightOverlayConfig.lookAhead
         val verticalLookAhead = minOf(lookAhead, MAX_VERTICAL_LOOK_AHEAD)
+        // The look-ahead counts twice in the walking direction, so the torches ahead are seen in full earlier.
+        val speed = sqrt(headingX * headingX + headingZ * headingZ)
+        val aheadX = if (speed < MIN_HEADING_SPEED) 0.0 else headingX / speed * lookAhead
+        val aheadZ = if (speed < MIN_HEADING_SPEED) 0.0 else headingZ / speed * lookAhead
         val snapshot = LightSnapshot.take(
             level,
-            center.x - radius - lookAhead, center.y - vertical - verticalLookAhead, center.z - radius - lookAhead,
-            center.x + radius + lookAhead, center.y + vertical + verticalLookAhead, center.z + radius + lookAhead
+            center.x - radius - lookAhead - maxOf(0.0, -aheadX).roundToInt(),
+            center.y - vertical - verticalLookAhead,
+            center.z - radius - lookAhead - maxOf(0.0, -aheadZ).roundToInt(),
+            center.x + radius + lookAhead + maxOf(0.0, aheadX).roundToInt(),
+            center.y + vertical + verticalLookAhead,
+            center.z + radius + lookAhead + maxOf(0.0, aheadZ).roundToInt()
         )
         val previousSnapshot = lastSnapshot
         trackTorches(snapshot, player.x, player.z)
@@ -178,6 +211,22 @@ object TorchPlanner {
         lastRequest = null
         ticksUntilPlan = 0
         forgetTorches()
+        lastPlayerX = Double.NaN
+    }
+
+    /** Follows the player's horizontal movement, smoothed so a short stop or sidestep doesn't turn it around. */
+    private fun trackHeading(x: Double, z: Double) {
+        val dx = x - lastPlayerX
+        val dz = z - lastPlayerZ
+        if (lastPlayerX.isNaN() || dx * dx + dz * dz > TELEPORT_DISTANCE_SQ) {
+            headingX = 0.0
+            headingZ = 0.0
+        } else {
+            headingX += (dx - headingX) * HEADING_SMOOTHING
+            headingZ += (dz - headingZ) * HEADING_SMOOTHING
+        }
+        lastPlayerX = x
+        lastPlayerZ = z
     }
 
     private fun forgetTorches() {
@@ -282,6 +331,13 @@ object TorchPlanner {
         fun inScanArea(x: Int, y: Int, z: Int): Boolean =
             abs(x - centerX) <= radius && abs(z - centerZ) <= radius && abs(y - centerY) <= vertical
 
+        /** Blocks a torch lights up in every direction, ignoring walls. */
+        val lightReach get() = emission - minLight
+
+        /** Columns whose torches can light floor in the scan area, i.e. the scan area grown by [lightReach]. */
+        fun inTorchArea(x: Int, z: Int): Boolean =
+            abs(x - centerX) <= radius + lightReach && abs(z - centerZ) <= radius + lightReach
+
         fun distanceTo(x: Int, y: Int, z: Int): Double {
             val dx = x + 0.5 - playerX
             val dy = y - playerY
@@ -297,42 +353,62 @@ object TorchPlanner {
 
         /** Cell per target id. */
         val cells: IntArray
-        val weights: FloatArray
 
         init {
             val cellList = IntArrayList()
-            val weightList = ArrayList<Float>()
             for (cell in 0 until snapshot.cellCount) {
                 if (!snapshot.isFloor(cell) || snapshot.blockLight(cell) >= request.minLight) continue
                 if (request.sphere?.contains(snapshot.xOf(cell), snapshot.yOf(cell), snapshot.zOf(cell)) == false) continue
-                idOf[cell] = weightList.size
+                idOf[cell] = cellList.size
                 cellList.add(cell)
-                weightList.add(weightOf(cell))
             }
             cells = cellList.toArray()
-            weights = weightList.toFloatArray()
         }
 
         fun inScanArea(cell: Int) = request.inScanArea(snapshot.xOf(cell), snapshot.yOf(cell), snapshot.zOf(cell))
 
-        private fun weightOf(cell: Int) = if (inScanArea(cell)) 1f else LOOK_AHEAD_WEIGHT
+        fun inTorchArea(cell: Int) = request.inTorchArea(snapshot.xOf(cell), snapshot.zOf(cell))
 
         /** Ids of the targets a torch on [cell] would light up. */
-        fun coveredBy(spreader: LightSnapshot.Spreader, cell: Int): IntArray {
+        fun coveredBy(spreader: LightSnapshot.Spreader, cell: Int): IntArray = coverage(spreader, cell).covers
+
+        /**
+         * The targets a torch on [cell] would light up, and whether its light reaches the side of the snapshot with
+         * enough left to go on, so it may light more floor beyond. The top and bottom don't count: floor that far up
+         * or down rarely matters, and it would leave hardly any position settled.
+         */
+        private fun coverage(spreader: LightSnapshot.Spreader, cell: Int): Coverage {
             val covers = IntArrayList()
-            spreader.spread(cell, request.emission, request.minLight) { reached, _ ->
+            var truncated = false
+            spreader.spread(cell, request.emission, request.minLight) { reached, light ->
                 val id = idOf[reached]
                 if (id >= 0) covers.add(id)
+                if (light > request.minLight && !truncated) {
+                    val x = snapshot.xOf(reached)
+                    val z = snapshot.zOf(reached)
+                    truncated = x == snapshot.minX || x == snapshot.maxX || z == snapshot.minZ || z == snapshot.maxZ
+                }
             }
-            return covers.toArray()
+            return Coverage(covers.toArray(), truncated)
         }
 
+        private class Coverage(val covers: IntArray, val truncated: Boolean)
+
         /** A torch on [cell] as a [TorchOptimizer.Candidate], or null if it wouldn't light up any dark floor. */
-        fun candidate(spreader: LightSnapshot.Spreader, cell: Int, pickedGain: Float = 0f): TorchOptimizer.Candidate? {
-            val covers = coveredBy(spreader, cell)
-            if (covers.isEmpty()) return null
+        fun candidate(
+            spreader: LightSnapshot.Spreader,
+            cell: Int,
+            sticky: Boolean = false,
+            pickedGain: Float = 0f
+        ): TorchOptimizer.Candidate? {
+            val coverage = coverage(spreader, cell)
+            if (coverage.covers.isEmpty()) return null
             val distance = request.distanceTo(snapshot.xOf(cell), snapshot.yOf(cell), snapshot.zOf(cell))
-            return TorchOptimizer.Candidate(cell, covers, (distance * DISTANCE_PENALTY).toFloat(), pickedGain)
+            return TorchOptimizer.Candidate(
+                cell, coverage.covers, coverage.truncated, -(distance * DISTANCE_PENALTY).toFloat(), sticky,
+                // Part of what it lit may now be beyond the snapshot, so its gain can't be compared any more.
+                if (coverage.truncated) 0f else pickedGain
+            )
         }
     }
 
@@ -379,17 +455,20 @@ object TorchPlanner {
                 continue
             }
             val cell = snapshot.index(x, y, z)
-            if (snapshot.isFloor(cell)) targets.candidate(spreader, cell, spot.gain)?.let(kept::add)
+            if (snapshot.isFloor(cell)) targets.candidate(spreader, cell, pickedGain = spot.gain)?.let(kept::add)
         }
+        val keptCandidates = kept.toHashSet()
 
-        val chosen = if (targets.weights.isEmpty()) {
+        val chosen = if (targets.cells.isEmpty()) {
             emptyList()
         } else {
-            val nearDark = nearDarkColumns(snapshot, targets, request.emission - request.minLight)
+            val provisional = remembered?.provisional.orEmpty()
+            val nearDark = nearDarkColumns(snapshot, targets, request.lightReach)
             val candidates = ArrayList<TorchOptimizer.Candidate>()
             for (cell in 0 until snapshot.cellCount) {
-                if (!snapshot.isFloor(cell) || !nearDark[cell / snapshot.sizeY] || !targets.inScanArea(cell)) continue
-                targets.candidate(spreader, cell)?.let(candidates::add)
+                if (!snapshot.isFloor(cell) || !nearDark[cell / snapshot.sizeY] || !targets.inTorchArea(cell)) continue
+                val sticky = BlockPos.asLong(snapshot.xOf(cell), snapshot.yOf(cell), snapshot.zOf(cell)) in provisional
+                targets.candidate(spreader, cell, sticky)?.let(candidates::add)
             }
             // The dark floor in the scan area, closest to the player first, packed as cost << 32 | target.
             val order = targets.cells.indices
@@ -398,7 +477,7 @@ object TorchPlanner {
                 .toLongArray()
                 .apply { sort() }
                 .let { packed -> IntArray(packed.size) { packed[it].toInt() } }
-            TorchOptimizer.plan(kept, candidates, targets.weights, order, MAX_NEW_SPOTS)
+            TorchOptimizer.plan(kept, candidates, targets.cells.size, order, MAX_NEW_SPOTS)
         }
 
         // The next torch lights the dark floor closest to the player; the one nearest to the player if several do.
@@ -413,7 +492,7 @@ object TorchPlanner {
             )
         }
         val shown = ranked
-            .filter { targets.inScanArea(it.candidate.cell) }
+            .filter { targets.inTorchArea(it.candidate.cell) }
             .sortedWith(compareBy<Ranked> { it.darkCost }.thenBy { it.cost })
         var next = shown.firstOrNull()
         // Stay with the previous next torch unless another one is clearly closer, so it doesn't flip back and forth.
@@ -422,13 +501,18 @@ object TorchPlanner {
 
         // Kept positions come first in the plan, in their original order, so older ones keep winning where they
         // overlap. Their gain stays the one they were picked with, so a position that slowly loses its use is dropped.
-        val keptHere = ranked.filter { it.candidate.pickedGain > 0f }.associateBy { it.pos }
+        // New positions are only remembered once settled, the provisional ones are planned again next time.
+        val keptHere = ranked.filter { it.candidate in keptCandidates }.mapTo(HashSet()) { it.pos }
         val spots = ArrayList<Remembered>(keptElsewhere.size + ranked.size)
         for (spot in remembered?.spots.orEmpty()) {
             if (spot in keptElsewhere || spot.pos in keptHere) spots.add(spot)
         }
-        for (it in ranked) if (it.pos !in keptHere) spots.add(Remembered(it.pos, it.candidate.gain))
-        memory = Memory(generation, spots, next?.pos)
+        val provisional = HashSet<Long>()
+        for (it in ranked) {
+            if (it.pos in keptHere) continue
+            if (it.candidate.settled) spots.add(Remembered(it.pos, it.candidate.gain)) else provisional.add(it.pos)
+        }
+        memory = Memory(generation, spots, provisional, next?.pos)
 
         if (next == null) return Plan.EMPTY
         val suggested = shown.asSequence().filter { it !== next }.take(request.count - 1)
@@ -554,7 +638,8 @@ object TorchPlanner {
 
     private class IntArrayList {
         private var data = IntArray(64)
-        private var size = 0
+        var size = 0
+            private set
 
         fun add(value: Int) {
             if (size == data.size) data = data.copyOf(size * 2)
