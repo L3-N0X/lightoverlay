@@ -112,6 +112,9 @@ object LightOverlayConfig {
     var gridPattern: GridPattern = GridPattern.DIAMOND
     var gridAnchor: GridAnchor = GridAnchor.NEWEST_TORCH
 
+    /** [GridPattern.STAGGERED]: move the torches in a row closer together where the terrain's height needs it. */
+    var gridAdaptiveSpacing: Boolean = false
+
     /** Blocks taken off the grid spacing, to leave some slack on uneven ground. */
     var gridMargin: Int = 0
 
@@ -126,6 +129,9 @@ object LightOverlayConfig {
 
     /** Draw the [FarmLock] spheres. */
     var showLockSphere: Boolean = true
+
+    /** Draw the inner [FarmLock] sphere as well. */
+    var showLockInnerSphere: Boolean = false
 
     /** RGB, no alpha. Floor outside the [FarmLock] spawn shell. */
     var outsideColor: Int = DEFAULT_OUTSIDE_COLOR
@@ -167,11 +173,13 @@ object LightOverlayConfig {
             showCoveragePreview = data.showCoveragePreview
             gridPattern = data.gridPattern ?: GridPattern.DIAMOND
             gridAnchor = data.gridAnchor ?: GridAnchor.NEWEST_TORCH
+            gridAdaptiveSpacing = data.gridAdaptiveSpacing
             gridMargin = data.gridMargin.coerceIn(0, 6)
             indicatorColor = data.indicatorColor
             lockRadius = data.lockRadius.coerceIn(1, DESPAWN_RADIUS)
             lockInnerRadius = data.lockInnerRadius.coerceIn(0, DESPAWN_RADIUS)
             showLockSphere = data.showLockSphere
+            showLockInnerSphere = data.showLockInnerSphere
             outsideColor = data.outsideColor
             sphereColor = data.sphereColor
         } catch (e: Exception) {
@@ -203,11 +211,13 @@ object LightOverlayConfig {
                 showCoveragePreview = showCoveragePreview,
                 gridPattern = gridPattern,
                 gridAnchor = gridAnchor,
+                gridAdaptiveSpacing = gridAdaptiveSpacing,
                 gridMargin = gridMargin,
                 indicatorColor = indicatorColor,
                 lockRadius = lockRadius,
                 lockInnerRadius = lockInnerRadius,
                 showLockSphere = showLockSphere,
+                showLockInnerSphere = showLockInnerSphere,
                 outsideColor = outsideColor,
                 sphereColor = sphereColor
             )
@@ -237,11 +247,13 @@ object LightOverlayConfig {
         val showCoveragePreview: Boolean = true,
         val gridPattern: GridPattern? = GridPattern.DIAMOND,
         val gridAnchor: GridAnchor? = GridAnchor.NEWEST_TORCH,
+        val gridAdaptiveSpacing: Boolean = false,
         val gridMargin: Int = 0,
         val indicatorColor: Int = DEFAULT_INDICATOR_COLOR,
         val lockRadius: Int = DESPAWN_RADIUS,
         val lockInnerRadius: Int = NO_SPAWN_RADIUS,
         val showLockSphere: Boolean = true,
+        val showLockInnerSphere: Boolean = false,
         val outsideColor: Int = DEFAULT_OUTSIDE_COLOR,
         val sphereColor: Int = DEFAULT_SPHERE_COLOR
     )

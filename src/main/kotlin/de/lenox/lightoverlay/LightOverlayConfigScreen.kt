@@ -178,6 +178,14 @@ object LightOverlayConfigScreen {
                                 .build()
                         )
                         .option(
+                            Option.createBuilder<Boolean>()
+                                .name(tr("grid_adaptive_spacing"))
+                                .description(desc("grid_adaptive_spacing"))
+                                .binding(false, { LightOverlayConfig.gridAdaptiveSpacing }, { LightOverlayConfig.gridAdaptiveSpacing = it })
+                                .controller { TickBoxControllerBuilder.create(it) }
+                                .build()
+                        )
+                        .option(
                             Option.createBuilder<GridAnchor>()
                                 .name(tr("grid_anchor"))
                                 .description(desc("grid_anchor"))
@@ -221,6 +229,14 @@ object LightOverlayConfigScreen {
                         .name(tr("show_lock_sphere"))
                         .description(desc("show_lock_sphere"))
                         .binding(true, { LightOverlayConfig.showLockSphere }, { LightOverlayConfig.showLockSphere = it })
+                        .controller { TickBoxControllerBuilder.create(it) }
+                        .build()
+                )
+                .option(
+                    Option.createBuilder<Boolean>()
+                        .name(tr("show_lock_inner_sphere"))
+                        .description(desc("show_lock_inner_sphere"))
+                        .binding(false, { LightOverlayConfig.showLockInnerSphere }, { LightOverlayConfig.showLockInnerSphere = it })
                         .controller { TickBoxControllerBuilder.create(it) }
                         .build()
                 )

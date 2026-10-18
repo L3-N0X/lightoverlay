@@ -42,7 +42,7 @@ object LightOverlayNeoForgeEvents {
     }
 
     @SubscribeEvent
-    fun onClientTick(event: ClientTickEvent.Post) {
+    fun onClientTick(event: ClientTickEvent.Pre) {
         LightOverlayMod.onClientTick(Minecraft.getInstance())
     }
 

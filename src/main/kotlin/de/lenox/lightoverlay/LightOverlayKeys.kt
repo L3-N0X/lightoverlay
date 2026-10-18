@@ -40,7 +40,7 @@ object LightOverlayKeys {
         category
     )
 
-    /** Pins the torch grid to the looked-at block. Can be bound to a mouse button to pin by clicking. */
+    /** Pins the torch grid to the looked-at block. Only works while [toggle] is held (F7 + G), see [LightOverlayMod]. */
     val pinGrid: KeyMapping = KeyMapping(
         "key.${LightOverlayMod.MOD_ID}.pin_grid",
         //? if <26.3
@@ -49,12 +49,15 @@ object LightOverlayKeys {
         category
     )
 
-    /** Locks the overlay to the player's position, see [FarmLock]. */
+    /**
+     * Locks the overlay to the player's position, see [FarmLock]. Only works while [toggle] is held (F7 + F), which
+     * keeps F from also swapping hands.
+     */
     val lockPosition: KeyMapping = KeyMapping(
         "key.${LightOverlayMod.MOD_ID}.lock_position",
         //? if <26.3
         InputConstants.Type.KEYSYM,
-        InputConstants.UNKNOWN.value,
+        InputConstants.KEY_F,
         category
     )
 

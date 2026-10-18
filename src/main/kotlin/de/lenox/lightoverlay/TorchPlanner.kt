@@ -187,6 +187,7 @@ object TorchPlanner {
             count = LightOverlayConfig.suggestionCount,
             pattern = LightOverlayConfig.gridPattern,
             reach = maxOf(1, emission - LightOverlayConfig.minLightLevel - LightOverlayConfig.gridMargin),
+            adaptive = LightOverlayConfig.gridPattern == GridPattern.STAGGERED && LightOverlayConfig.gridAdaptiveSpacing,
             anchor = gridAnchor(snapshot, player.x, player.z),
             sphere = FarmLock.sphere
         )
@@ -324,6 +325,8 @@ object TorchPlanner {
         val pattern: GridPattern,
         /** Blocks a torch's light reaches on flat ground, the grid spacing follows from it. */
         val reach: Int,
+        /** Lay the rows out with [AdaptiveRows] instead of the regular lattice. */
+        val adaptive: Boolean,
         val anchor: Pair<Int, Int>,
         /** While locked, only dark floor inside the [FarmLock] spawn shell needs light. */
         val sphere: FarmLock.Sphere?
@@ -560,6 +563,34 @@ object TorchPlanner {
     }
 
     private fun planGrid(snapshot: LightSnapshot, request: Request, targets: Targets, spreader: LightSnapshot.Spreader): Plan {
+        val playerY = floor(request.playerY).toInt()
+        val cells = if (request.adaptive) {
+            AdaptiveRows(snapshot, request, spreader, playerY).cells()
+        } else {
+            latticeCells(snapshot, request, playerY)
+        }
+
+        class GridSpot(val cell: Int, val kind: SpotKind, val covers: IntArray, val distance: Double)
+        val gridSpots = ArrayList<GridSpot>()
+        for (cell in cells) {
+            val distance = request.distanceTo(snapshot.xOf(cell), snapshot.yOf(cell), snapshot.zOf(cell))
+            // A light source of about the same strength is already on or next to this spot.
+            if (snapshot.blockLight(cell) >= request.emission - 1) {
+                gridSpots.add(GridSpot(cell, SpotKind.GRID_DONE, IntArray(0), distance))
+                continue
+            }
+            val covers = targets.coveredBy(spreader, cell)
+            val kind = if (covers.isEmpty()) SpotKind.GRID_LIT else SpotKind.SUGGESTED
+            gridSpots.add(GridSpot(cell, kind, covers, distance))
+        }
+
+        val next = gridSpots.filter { it.kind == SpotKind.SUGGESTED }.minByOrNull { it.distance }
+        val spots = gridSpots.map { spot(snapshot, it.cell, if (it === next) SpotKind.NEXT else it.kind) }
+        return Plan(spots, if (next == null) LongArray(0) else preview(snapshot, targets, next.covers))
+    }
+
+    /** The floor cells of the [GridPattern] lattice points in the scan area. */
+    private fun latticeCells(snapshot: LightSnapshot, request: Request, playerY: Int): List<Int> {
         val (ax, az, bx, bz) = gridBasis(request.pattern, request.reach)
         val (anchorX, anchorZ) = request.anchor
         val minX = request.centerX - request.radius
@@ -582,32 +613,216 @@ object TorchPlanner {
             minJ = minOf(minJ, j); maxJ = maxOf(maxJ, j)
         }
 
-        val playerY = floor(request.playerY).toInt()
-        class GridSpot(val cell: Int, val kind: SpotKind, val covers: IntArray, val distance: Double)
-        val gridSpots = ArrayList<GridSpot>()
+        val cells = ArrayList<Int>()
         for (i in floor(minI).toInt()..ceil(maxI).toInt()) {
             for (j in floor(minJ).toInt()..ceil(maxJ).toInt()) {
                 val x = anchorX + i * ax + j * bx
                 val z = anchorZ + i * az + j * bz
                 if (x !in minX..maxX || z !in minZ..maxZ) continue
                 val cell = snapshot.floorNear(x, z, playerY, request.centerY - request.vertical, request.centerY + request.vertical)
-                if (cell < 0) continue
-                val y = snapshot.yOf(cell)
-                val distance = request.distanceTo(x, y, z)
-                // A light source of about the same strength is already on or next to this spot.
-                if (snapshot.blockLight(cell) >= request.emission - 1) {
-                    gridSpots.add(GridSpot(cell, SpotKind.GRID_DONE, IntArray(0), distance))
-                    continue
+                if (cell >= 0) cells.add(cell)
+            }
+        }
+        return cells
+    }
+
+    /**
+     * [GridPattern.STAGGERED] with the gaps along each row fitted to the terrain. The rows stay where the lattice
+     * has them, [Request.reach] apart. Along a row, each torch goes as far from the previous one as the regular gap
+     * (twice the reach) allows while the floor in between, and between this row and the one laid out before it, still
+     * gets light; on uneven ground light loses levels climbing up and down, so the gap shrinks there, down to the reach.
+     * Rows are laid out from the anchor's row outwards, each against the one before, starting at a lattice point, so
+     * flat ground comes out as the regular lattice.
+     *
+     * The floor is a heightmap: per column the floor closest to the player's height, the same one the spots stand on.
+     * The light of torches in the snapshot is simulated, torches beyond it are taken to stand on flat ground. Floor no
+     * torch in reach could light (a tree top, a deep hole) doesn't count.
+     */
+    private class AdaptiveRows(
+        private val snapshot: LightSnapshot,
+        private val request: Request,
+        private val spreader: LightSnapshot.Spreader,
+        playerY: Int
+    ) {
+        private val reach = request.reach
+        private val sizeZ = snapshot.sizeZ
+
+        /** Floor cell per column, -1 if there is none. Columns are numbered like the snapshot's (x * sizeZ + z). */
+        private val heightmap = IntArray(snapshot.sizeX * sizeZ) { column ->
+            snapshot.floorNear(
+                snapshot.minX + column / sizeZ, snapshot.minZ + column % sizeZ,
+                playerY, request.centerY - request.vertical, request.centerY + request.vertical
+            )
+        }
+
+        /** Columns whose floor a torch at (x, z) lights up, keyed by [key]. */
+        private val litCache = HashMap<Long, IntArray>()
+
+        /** Columns lit by the torches placed so far in the current row and the one before it. */
+        private val lit = BooleanArray(heightmap.size)
+
+        /** Marks columns some candidate of the current step lights ([coverableStamp]) or the one checked ([candidateStamp]). */
+        private val coverable = IntArray(heightmap.size)
+        private val candidate = IntArray(heightmap.size)
+        private var coverableStamp = 0
+        private var candidateStamp = 0
+
+        /** The floor cells of the torches in the scan area. */
+        fun cells(): List<Int> {
+            val (anchorX, anchorZ) = request.anchor
+            val rows = HashMap<Int, IntArray>()
+            val first = startIndex(anchorX, snapshot.minX, snapshot.maxX, 0, 1)
+            rows[first] = layRow(first, null, anchorX, anchorZ)
+            var p = first
+            while (anchorX + p * reach <= snapshot.maxX) {
+                rows[p + 1] = layRow(p + 1, p to rows.getValue(p), anchorX, anchorZ)
+                p++
+            }
+            p = first
+            while (anchorX + p * reach >= snapshot.minX) {
+                rows[p - 1] = layRow(p - 1, p to rows.getValue(p), anchorX, anchorZ)
+                p--
+            }
+
+            val minX = request.centerX - request.radius
+            val maxX = request.centerX + request.radius
+            val minZ = request.centerZ - request.radius
+            val maxZ = request.centerZ + request.radius
+            val cells = ArrayList<Int>()
+            for ((row, zs) in rows) {
+                val x = anchorX + row * reach
+                if (x !in minX..maxX) continue
+                for (z in zs) {
+                    if (z !in minZ..maxZ) continue
+                    val cell = heightmap[column(x, z)]
+                    if (cell >= 0) cells.add(cell)
                 }
-                val covers = targets.coveredBy(spreader, cell)
-                val kind = if (covers.isEmpty()) SpotKind.GRID_LIT else SpotKind.SUGGESTED
-                gridSpots.add(GridSpot(cell, kind, covers, distance))
+            }
+            return cells
+        }
+
+        /**
+         * The torch positions (z) of row [row], walking both ways from a lattice point next to the anchor. Without a
+         * [previous] row only the row's own line needs light, otherwise the band between the two rows does.
+         */
+        private fun layRow(row: Int, previous: Pair<Int, IntArray>?, anchorX: Int, anchorZ: Int): IntArray {
+            val x = anchorX + row * reach
+            lit.fill(false)
+            val band = if (previous == null) {
+                x..x
+            } else {
+                val previousX = anchorX + previous.first * reach
+                for (z in previous.second) light(previousX, z)
+                if (previousX < x) previousX + 1..x else x..previousX - 1
+            }
+
+            // Lattice points in a row are twice the reach apart, every other row is shifted by the reach.
+            val start = anchorZ + startIndex(anchorZ, snapshot.minZ, snapshot.maxZ, Math.floorMod(row, 2), 2) * reach
+            val zs = IntArrayList()
+            zs.add(start)
+            light(x, start)
+            var z = start
+            while (z <= snapshot.maxZ) {
+                z += step(x, z, 1, band)
+                zs.add(z)
+                light(x, z)
+            }
+            z = start
+            while (z >= snapshot.minZ) {
+                z -= step(x, z, -1, band)
+                zs.add(z)
+                light(x, z)
+            }
+            return zs.toArray()
+        }
+
+        /**
+         * How far (in [direction]) the torch after the one at ([x], [from]) goes: the largest gap up to twice the reach
+         * that leaves no floor in [band] between the two dark, or the one leaving the least dark floor right after
+         * [from] if every gap does.
+         */
+        private fun step(x: Int, from: Int, direction: Int, band: IntRange): Int {
+            val maxStep = 2 * reach
+            val minStep = maxOf(1, reach)
+            coverableStamp++
+            for (s in minStep..maxStep) {
+                for (column in litColumns(x, from + direction * s)) coverable[column] = coverableStamp
+            }
+            for (s in maxStep downTo minStep) {
+                if (darkColumns(x, from, from + direction * s, band, from + direction * s) == 0) return s
+            }
+            // Ties go to the larger gap.
+            return (maxStep downTo minStep).minBy { s ->
+                darkColumns(x, from, from + direction * s, band, from + direction * minStep)
             }
         }
 
-        val next = gridSpots.filter { it.kind == SpotKind.SUGGESTED }.minByOrNull { it.distance }
-        val spots = gridSpots.map { spot(snapshot, it.cell, if (it === next) SpotKind.NEXT else it.kind) }
-        return Plan(spots, if (next == null) LongArray(0) else preview(snapshot, targets, next.covers))
+        /**
+         * Floor columns in [band] from [from] to [to] that stay dark with a torch at ([x], [next]), not counting
+         * the ones no candidate could light.
+         */
+        private fun darkColumns(x: Int, from: Int, next: Int, band: IntRange, to: Int): Int {
+            candidateStamp++
+            for (column in litColumns(x, next)) candidate[column] = candidateStamp
+            var dark = 0
+            for (bx in band) {
+                if (bx !in snapshot.minX..snapshot.maxX) continue
+                for (bz in minOf(from, to)..maxOf(from, to)) {
+                    if (bz !in snapshot.minZ..snapshot.maxZ) continue
+                    val column = column(bx, bz)
+                    if (heightmap[column] < 0 || lit[column] || candidate[column] == candidateStamp) continue
+                    if (coverable[column] == coverableStamp) dark++
+                }
+            }
+            return dark
+        }
+
+        private fun light(x: Int, z: Int) {
+            for (column in litColumns(x, z)) lit[column] = true
+        }
+
+        private fun litColumns(x: Int, z: Int): IntArray = litCache.getOrPut(key(x, z)) {
+            val columns = IntArrayList()
+            if (x in snapshot.minX..snapshot.maxX && z in snapshot.minZ..snapshot.maxZ) {
+                val cell = heightmap[column(x, z)]
+                if (cell >= 0) {
+                    spreader.spread(cell, request.emission, request.emission - reach) { reached, _ ->
+                        val column = reached / snapshot.sizeY
+                        if (heightmap[column] == reached) columns.add(column)
+                    }
+                }
+            } else {
+                // Beyond the snapshot: as on flat ground.
+                for (dx in -reach..reach) {
+                    val rest = reach - abs(dx)
+                    for (dz in -rest..rest) {
+                        val cx = x + dx
+                        val cz = z + dz
+                        if (cx in snapshot.minX..snapshot.maxX && cz in snapshot.minZ..snapshot.maxZ) columns.add(column(cx, cz))
+                    }
+                }
+            }
+            columns.toArray()
+        }
+
+        private fun column(x: Int, z: Int) = (x - snapshot.minX) * sizeZ + (z - snapshot.minZ)
+
+        private fun key(x: Int, z: Int) = x.toLong() shl 32 or (z.toLong() and 0xFFFFFFFFL)
+
+        /**
+         * The index k of the lattice line `anchor + k * reach` (with k ≡ [parity] mod [modulus]) to start from: next
+         * to the anchor if it lies in [low]..[high], otherwise the last one before that range on the anchor's side,
+         * as everything beyond the snapshot is laid out regularly anyway.
+         */
+        private fun startIndex(anchor: Int, low: Int, high: Int, parity: Int, modulus: Int): Int {
+            val k = when {
+                anchor < low -> Math.floorDiv(low - 1 - anchor, reach)
+                anchor > high -> -Math.floorDiv(anchor - high - 1, reach)
+                else -> 0
+            }
+            if (Math.floorMod(k - parity, modulus) == 0) return k
+            return if (anchor > high) k + 1 else if (anchor < low) k - 1 else k + 1
+        }
     }
 
     /**

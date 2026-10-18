@@ -21,7 +21,7 @@ class LightOverlayFabric : ClientModInitializer {
         LightOverlayKeys.all.forEach(KeyBindingHelper::registerKeyBinding)
         //?}
 
-        ClientTickEvents.END_CLIENT_TICK.register { mc -> LightOverlayMod.onClientTick(mc) }
+        ClientTickEvents.START_CLIENT_TICK.register { mc -> LightOverlayMod.onClientTick(mc) }
 
         //? if >=26.2 {
         /*LevelRenderEvents.COLLECT_SUBMITS.register { context ->
