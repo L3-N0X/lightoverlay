@@ -1,43 +1,65 @@
 package de.lenox.lightoverlay
 
-import com.mojang.blaze3d.vertex.PoseStack
-import com.mojang.blaze3d.vertex.VertexConsumer
-import net.minecraft.world.phys.Vec3
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import kotlin.math.ceil
-import kotlin.math.floor
-import kotlin.math.sqrt
-//? if <26.2 {
-import com.mojang.blaze3d.buffers.GpuBuffer
-import com.mojang.blaze3d.pipeline.BlendFunction
-//? if >=26.1 {
-/*import com.mojang.blaze3d.pipeline.ColorTargetState
-import com.mojang.blaze3d.pipeline.DepthStencilState
-import com.mojang.blaze3d.platform.CompareOp
-*///?}
-import com.mojang.blaze3d.pipeline.RenderPipeline
-import com.mojang.blaze3d.shaders.UniformType
+import com.mojang.blaze3d.pipeline.RenderTarget
 import com.mojang.blaze3d.systems.RenderSystem
 import com.mojang.blaze3d.vertex.DefaultVertexFormat
-import com.mojang.blaze3d.vertex.VertexFormat
+import com.mojang.blaze3d.vertex.PoseStack
+import com.mojang.blaze3d.vertex.VertexConsumer
 import net.minecraft.client.Minecraft
 import net.minecraft.resources.Identifier
+import net.minecraft.world.phys.Vec3
 import org.joml.Matrix4f
+import org.joml.Matrix4fc
 import org.joml.Vector3f
 import org.joml.Vector4f
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.OptionalDouble
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.sqrt
+//? if >=26.3 {
+/*import com.mojang.renderpearl.api.buffers.GpuBuffer
+import com.mojang.renderpearl.api.pipeline.BlendFunction
+import com.mojang.renderpearl.api.pipeline.ColorTargetState
+import com.mojang.renderpearl.api.pipeline.CompareOp
+import com.mojang.renderpearl.api.pipeline.DepthStencilState
+import com.mojang.renderpearl.api.pipeline.PrimitiveTopology
+import com.mojang.renderpearl.api.pipeline.RenderPipeline
+import net.minecraft.client.renderer.BindGroupLayouts
+import java.util.Optional
+*///?} elif >=26.2 {
+/*import com.mojang.blaze3d.PrimitiveTopology
+import com.mojang.blaze3d.buffers.GpuBuffer
+import com.mojang.blaze3d.framegraph.FrameGraphBuilder
+import com.mojang.blaze3d.pipeline.BlendFunction
+import com.mojang.blaze3d.pipeline.ColorTargetState
+import com.mojang.blaze3d.pipeline.DepthStencilState
+import com.mojang.blaze3d.pipeline.RenderPipeline
+import com.mojang.blaze3d.platform.CompareOp
+import net.minecraft.client.renderer.BindGroupLayouts
+import net.minecraft.client.renderer.LevelTargetBundle
+import java.util.Optional
+*///?} elif >=26.1 {
+/*import com.mojang.blaze3d.buffers.GpuBuffer
+import com.mojang.blaze3d.pipeline.BlendFunction
+import com.mojang.blaze3d.pipeline.ColorTargetState
+import com.mojang.blaze3d.pipeline.DepthStencilState
+import com.mojang.blaze3d.pipeline.RenderPipeline
+import com.mojang.blaze3d.platform.CompareOp
+import com.mojang.blaze3d.shaders.UniformType
+import com.mojang.blaze3d.vertex.VertexFormat
 import java.util.OptionalInt
-//?} else {
-/*import net.minecraft.client.Minecraft
-import kotlin.math.PI
-import kotlin.math.asin
-import kotlin.math.atan
-import kotlin.math.cos
-import kotlin.math.tan
-*///?}
+*///?} else {
+import com.mojang.blaze3d.buffers.GpuBuffer
+import com.mojang.blaze3d.pipeline.BlendFunction
+import com.mojang.blaze3d.pipeline.RenderPipeline
+import com.mojang.blaze3d.shaders.UniformType
+import com.mojang.blaze3d.vertex.VertexFormat
+import java.util.OptionalInt
+//?}
 
 /**
  * Draws the [FarmLock] spheres like MiniHUD's blocky spawn/despawn spheres: the outer faces of the floor blocks a mob
@@ -45,9 +67,9 @@ import kotlin.math.tan
  * few rectangles as possible. Faces lie exactly on the block grid and the whole sphere is drawn. Plus a marker on the
  * locked spot.
  *
- * Like MiniHUD, the sphere is uploaded to a GPU buffer once and drawn from there every frame with its own pipeline
- * (`debugQuads` with a depth bias, so faces on terrain faces don't z-fight). From 26.2 on the render hooks only collect
- * submits, so there the visible part of the mesh goes through the `debugQuads` pass every frame instead.
+ * Like MiniHUD, the sphere is uploaded to a GPU buffer once and drawn from there every frame in its own render pass
+ * with its own pipeline (`debugQuads` with a depth bias, so faces on terrain faces don't z-fight). Before 26.2 that
+ * happens in the render hook; from 26.2 on the hooks only collect submits, so `MixinLevelRenderer` calls in instead.
  */
 object FarmLockRenderer {
     /** MiniHUD's default sphere alpha (`#60A04050`). */
@@ -63,7 +85,6 @@ object FarmLockRenderer {
 
     /** Quads as 4 corners × xyz in [vertices], relative to the block ([ox], [oy], [oz]) so the floats stay exact. */
     private class Mesh(val ox: Int, val oy: Int, val oz: Int, vertices: FloatArray) {
-        //? if <26.2 {
         val indexCount = vertices.size / 12 * 6
 
         // POSITION_COLOR vertices in white (the colour is the ColorModulator), so the colour can change without a
@@ -79,9 +100,6 @@ object FarmLockRenderer {
 
         // Uploaded on the first draw. Render thread only.
         var buffer: GpuBuffer? = null
-        //?} else {
-        /*val sections = sections(vertices)
-        *///?}
     }
 
     /** Meshes for the keys last requested, built on [executor]. */
@@ -96,30 +114,67 @@ object FarmLockRenderer {
     }
 
     /**
-     * Draws the spheres and the marker. The marker goes into [quads]; vertex positions are made camera-relative, so
+     * Draws the marker into [quads], and before 26.2 also the spheres. Vertex positions are made camera-relative, so
      * [pose] only needs the camera rotation.
      */
     fun draw(quads: VertexConsumer, pose: PoseStack.Pose, sphere: FarmLock.Sphere, cameraPos: Vec3) {
-        val color = LightOverlayConfig.sphereColor
+        //? if <26.2 {
+        val modelView = Matrix4f(RenderSystem.getModelViewMatrix()).mul(pose.pose())
+        drawSpheres(sphere, cameraPos, Minecraft.getInstance().mainRenderTarget, modelView)
+        //?}
+        drawMarker(
+            quads, pose, (MARKER_ALPHA shl 24) or LightOverlayConfig.sphereColor,
+            (sphere.x - cameraPos.x).toFloat(), (sphere.y - cameraPos.y).toFloat(), (sphere.z - cameraPos.z).toFloat()
+        )
+    }
+
+    //? if >=26.3 {
+    /*/**
+     * Draws the spheres onto the main target. Called by `MixinLevelRenderer` from inside the main pass, after the
+     * translucent terrain and features, while the camera rotation is on the model-view stack and the depth buffer
+     * hasn't been cleared for the always-on-top features yet. (MiniHUD draws once `LevelRenderer.render` returns.)
+     */
+    @JvmStatic
+    fun renderLevel() {
+        val sphere = visibleSphere() ?: return
+        val mc = Minecraft.getInstance()
+        drawSpheres(sphere, cameraPos(mc), mc.gameRenderer.mainRenderTarget(), RenderSystem.getModelViewMatrixCopy())
+    }
+    *///?} elif >=26.2 {
+    /*/**
+     * Adds a frame pass that draws the spheres onto the main target, like MiniHUD's world-last pass. Called by
+     * `MixinLevelRenderer` right before the always-on-top pass, which clears the depth buffer.
+     */
+    @JvmStatic
+    fun addPass(frame: FrameGraphBuilder, targets: LevelTargetBundle) {
+        val sphere = visibleSphere() ?: return
+        val cameraPos = cameraPos(Minecraft.getInstance())
+        val pass = frame.addPass("${LightOverlayMod.MOD_ID}_farm_lock")
+        targets.main = pass.readsAndWrites(targets.main)
+        val main = targets.main
+        pass.disableCulling()
+        pass.executes { drawSpheres(sphere, cameraPos, main.get(), RenderSystem.getModelViewMatrixCopy()) }
+    }
+    *///?}
+
+    //? if >=26.2 {
+    /*private fun visibleSphere(): FarmLock.Sphere? =
+        FarmLock.sphere?.takeIf { LightOverlayMod.active && LightOverlayConfig.showLockSphere }
+
+    private fun cameraPos(mc: Minecraft): Vec3 = mc.gameRenderer.gameRenderState().levelRenderState.cameraRenderState.pos
+    *///?}
+
+    /** Draws the meshes of [sphere] (and its inner sphere, if shown), building them in the background first. */
+    private fun drawSpheres(sphere: FarmLock.Sphere, cameraPos: Vec3, target: RenderTarget, modelView: Matrix4fc) {
         val outer = Key(sphere.x, sphere.y, sphere.z, sphere.radius)
         val inner = Key(sphere.x, sphere.y, sphere.z, sphere.innerRadius)
             .takeIf { LightOverlayConfig.showLockInnerSphere && sphere.innerRadius > 0 }
         val current = meshes
         meshes(listOfNotNull(outer, inner))
-        val drawn = listOfNotNull(current[outer], inner?.let { current[it] })
-
-        //? if <26.2 {
         release(current.values)
-        for (mesh in drawn) drawBuffer(pose, mesh, cameraPos, color)
-        //?} else {
-        /*val argb = (FACE_ALPHA shl 24) or color
-        val view = view()
-        for (mesh in drawn) drawMesh(quads, pose, argb, mesh, cameraPos, view)
-        *///?}
-        drawMarker(
-            quads, pose, (MARKER_ALPHA shl 24) or color,
-            (sphere.x - cameraPos.x).toFloat(), (sphere.y - cameraPos.y).toFloat(), (sphere.z - cameraPos.z).toFloat()
-        )
+        val rgb = LightOverlayConfig.sphereColor
+        current[outer]?.let { drawBuffer(it, cameraPos, target, modelView, rgb) }
+        inner?.let { current[it] }?.let { drawBuffer(it, cameraPos, target, modelView, rgb) }
     }
 
     /** Builds the meshes for [keys] in the background if they aren't there yet, and forgets all others. */
@@ -133,24 +188,41 @@ object FarmLockRenderer {
         }
     }
 
-    //? if <26.2 {
     /** MiniHUD's `MINIHUD_SHAPE_OFFSET_NO_CULL`: vanilla `debugQuads`, plus the depth bias. */
     private val PIPELINE: RenderPipeline = RenderPipeline.builder()
         .withLocation(Identifier.fromNamespaceAndPath(LightOverlayMod.MOD_ID, "pipeline/farm_lock_sphere"))
+        //? if >=26.3 {
+        /*.withBindGroupLayout(BindGroupLayouts.GLOBALS)
+        .withBindGroupLayout(BindGroupLayouts.PROJECTION)
+        .withBindGroupLayout(BindGroupLayouts.DYNAMIC_TRANSFORMS)
+        *///?} elif >=26.2 {
+        /*.withBindGroupLayout(BindGroupLayouts.GLOBALS)
+        .withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
+        *///?} else {
         .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
         .withUniform("Projection", UniformType.UNIFORM_BUFFER)
+        //?}
         .withVertexShader("core/position_color")
         .withFragmentShader("core/position_color")
-        //? if >=26.1 {
+        //? if >=26.2 {
+        /*// The depth buffer is reversed from 26.2 on (near is 1), so the test and the bias flip too.
+        .withColorTargetState(ColorTargetState(BlendFunction.TRANSLUCENT))
+        .withDepthStencilState(DepthStencilState(CompareOp.GREATER_THAN_OR_EQUAL, false, 3f, 3f))
+        .withCull(false)
+        .withVertexBinding(0, DefaultVertexFormat.POSITION_COLOR)
+        .withPrimitiveTopology(PrimitiveTopology.QUADS)
+        *///?} elif >=26.1 {
         /*.withColorTargetState(ColorTargetState(BlendFunction.TRANSLUCENT))
         .withDepthStencilState(DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, false, -3f, -3f))
+        .withCull(false)
+        .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS)
         *///?} else {
         .withBlend(BlendFunction.TRANSLUCENT)
         .withDepthWrite(false)
         .withDepthBias(-3f, -3f)
-        //?}
         .withCull(false)
         .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS)
+        //?}
         .build()
 
     /** Meshes with a GPU buffer. Render thread only. */
@@ -167,11 +239,11 @@ object FarmLockRenderer {
     }
 
     /**
-     * Draws [mesh] from its GPU buffer (uploading it first if needed) straight into the main target, like MiniHUD's
+     * Draws [mesh] from its GPU buffer (uploading it first if needed) straight into [target], like MiniHUD's
      * `RenderObjectVbo`. All faces have the same colour, so the translucent quads blend the same in any order and need
      * no sorting.
      */
-    private fun drawBuffer(pose: PoseStack.Pose, mesh: Mesh, cameraPos: Vec3, rgb: Int) {
+    private fun drawBuffer(mesh: Mesh, cameraPos: Vec3, target: RenderTarget, modelView: Matrix4fc, rgb: Int) {
         if (mesh.indexCount == 0) return
         val device = RenderSystem.getDevice()
         val buffer = mesh.buffer ?: device.createBuffer(
@@ -182,121 +254,50 @@ object FarmLockRenderer {
             uploaded += mesh
         }
 
-        val target = Minecraft.getInstance().mainRenderTarget
         val colorView = target.colorTextureView ?: return
+        //? if >=26.3 {
+        /*val depthView = if (target.hasDepth()) target.depthTextureView else null
+        *///?} else {
         val depthView = if (target.useDepth) target.depthTextureView else null
-        val modelView = Matrix4f(RenderSystem.getModelViewMatrix()).mul(pose.pose()).translate(
+        //?}
+        val transform = Matrix4f(modelView).translate(
             (mesh.ox - cameraPos.x).toFloat(), (mesh.oy - cameraPos.y).toFloat(), (mesh.oz - cameraPos.z).toFloat()
         )
         val colorModulator = Vector4f(
             (rgb shr 16 and 0xFF) / 255f, (rgb shr 8 and 0xFF) / 255f, (rgb and 0xFF) / 255f, FACE_ALPHA / 255f
         )
-        val transforms = RenderSystem.getDynamicUniforms().writeTransform(modelView, colorModulator, Vector3f(), Matrix4f())
+        val transforms = RenderSystem.getDynamicUniforms().writeTransform(transform, colorModulator, Vector3f(), Matrix4f())
+        //? if >=26.2 {
+        /*val indices = RenderSystem.getSequentialBuffer(PrimitiveTopology.QUADS)
+        val noClear = Optional.empty<org.joml.Vector4fc>()
+        *///?} else {
         val indices = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS)
+        val noClear = OptionalInt.empty()
+        //?}
         val indexBuffer = indices.getBuffer(mesh.indexCount)
 
         device.createCommandEncoder().createRenderPass(
-            { "Light Overlay farm lock sphere" }, colorView, OptionalInt.empty(), depthView, OptionalDouble.empty()
+            { "Light Overlay farm lock sphere" }, colorView, noClear, depthView, OptionalDouble.empty()
         ).use { pass ->
+            //? if >=26.3 {
+            /*pass.setPipeline(RenderSystem.getCompiledPipeline(PIPELINE))
+            *///?} else {
             pass.setPipeline(PIPELINE)
+            //?}
             val scissor = RenderSystem.getScissorStateForRenderTypeDraws()
             if (scissor.enabled()) pass.enableScissor(scissor.x(), scissor.y(), scissor.width(), scissor.height())
             RenderSystem.bindDefaultUniforms(pass)
             pass.setUniform("DynamicTransforms", transforms)
-            pass.setVertexBuffer(0, buffer)
             pass.setIndexBuffer(indexBuffer, indices.type())
+            //? if >=26.2 {
+            /*pass.setVertexBuffer(0, buffer.slice())
+            pass.drawIndexed(mesh.indexCount, 1, 0, 0, 0)
+            *///?} else {
+            pass.setVertexBuffer(0, buffer)
             pass.drawIndexed(0, 0, mesh.indexCount, 1)
+            //?}
         }
     }
-    //?} else {
-    /*// MiniHUD keeps faces that lie on terrain faces from z-fighting with a depth bias in its pipeline. `debugQuads` has
-    // none, so every vertex is pulled this fraction of its distance towards the camera instead. That is a scaling about
-    // the eye, so the faces still line up and land on the same pixels; only their depth gets a bias that grows with
-    // the distance, like the depth buffer's precision shrinks with it.
-    private const val DEPTH_PULL = 1f - 1e-3f
-
-    // Quads are grouped into cells of this size, which are skipped as a whole when outside the view.
-    private const val SECTION_SIZE = 16
-
-    // Margin on the vertical FOV for FOV effects (sprinting, speed) when culling sections.
-    private const val FOV_MARGIN = 1.4
-
-    // Quads as 4 corners × xyz within the bounding sphere (cx, cy, cz, radius), all relative to the mesh origin.
-    private class Section(val cx: Float, val cy: Float, val cz: Float, val radius: Float, val vertices: FloatArray)
-
-    // The camera's view cone: forward direction and half the opening angle, the screen corners included.
-    private class View(val fx: Float, val fy: Float, val fz: Float, val halfAngle: Double)
-
-    private fun view(): View {
-        val mc = Minecraft.getInstance()
-        val forward = mc.gameRenderer.mainCamera().forwardVector()
-        val window = mc.window
-        val aspect = window.width.toDouble() / maxOf(window.height, 1)
-        val fov = minOf(mc.options.fov().get() * FOV_MARGIN, 170.0)
-        val tanHalf = tan(fov / 2 * PI / 180)
-        return View(forward.x(), forward.y(), forward.z(), atan(tanHalf * sqrt(1 + aspect * aspect)))
-    }
-
-    // Draws the sections of the mesh that can be in the view. A 128 block sphere has over 100k rectangles.
-    private fun drawMesh(quads: VertexConsumer, pose: PoseStack.Pose, argb: Int, mesh: Mesh, cameraPos: Vec3, view: View) {
-        // The camera relative to the mesh origin.
-        val cx = (cameraPos.x - mesh.ox).toFloat()
-        val cy = (cameraPos.y - mesh.oy).toFloat()
-        val cz = (cameraPos.z - mesh.oz).toFloat()
-        for (section in mesh.sections) {
-            if (!visible(section, cx, cy, cz, view)) continue
-            val v = section.vertices
-            var i = 0
-            while (i < v.size) {
-                quads.addVertex(pose, (v[i] - cx) * DEPTH_PULL, (v[i + 1] - cy) * DEPTH_PULL, (v[i + 2] - cz) * DEPTH_PULL)
-                    .setColor(argb)
-                i += 3
-            }
-        }
-    }
-
-    // Whether any part of the bounding sphere of the section is within the view cone from (cx, cy, cz).
-    private fun visible(section: Section, cx: Float, cy: Float, cz: Float, view: View): Boolean {
-        val dx = section.cx - cx
-        val dy = section.cy - cy
-        val dz = section.cz - cz
-        val distance = sqrt(dx * dx + dy * dy + dz * dz)
-        if (distance <= section.radius) return true
-        val limit = view.halfAngle + asin((section.radius / distance).toDouble())
-        if (limit >= PI) return true
-        val cosAngle = (dx * view.fx + dy * view.fy + dz * view.fz) / distance
-        return cosAngle >= cos(limit)
-    }
-
-    // Groups the quads by the SECTION_SIZE cell their centre is in.
-    private fun sections(vertices: FloatArray): List<Section> {
-        val cells = HashMap<Long, FloatList>()
-        var i = 0
-        while (i < vertices.size) {
-            // Corners 0 and 2 are opposite.
-            val x = floor((vertices[i] + vertices[i + 6]) / 2 / SECTION_SIZE).toLong()
-            val y = floor((vertices[i + 1] + vertices[i + 7]) / 2 / SECTION_SIZE).toLong()
-            val z = floor((vertices[i + 2] + vertices[i + 8]) / 2 / SECTION_SIZE).toLong()
-            val cell = (x and 0x1FFFFF) or ((y and 0x1FFFFF) shl 21) or ((z and 0x1FFFFF) shl 42)
-            cells.getOrPut(cell) { FloatList(1 shl 8) }.addAll(vertices, i, 12)
-            i += 12
-        }
-        return cells.values.map { list ->
-            val v = list.toArray()
-            var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE; var minZ = Float.MAX_VALUE
-            var maxX = -Float.MAX_VALUE; var maxY = -Float.MAX_VALUE; var maxZ = -Float.MAX_VALUE
-            var k = 0
-            while (k < v.size) {
-                minX = minOf(minX, v[k]); maxX = maxOf(maxX, v[k])
-                minY = minOf(minY, v[k + 1]); maxY = maxOf(maxY, v[k + 1])
-                minZ = minOf(minZ, v[k + 2]); maxZ = maxOf(maxZ, v[k + 2])
-                k += 3
-            }
-            val hx = (maxX - minX) / 2; val hy = (maxY - minY) / 2; val hz = (maxZ - minZ) / 2
-            Section(minX + hx, minY + hy, minZ + hz, sqrt(hx * hx + hy * hy + hz * hz), v)
-        }
-    }
-    *///?}
 
     private const val NONE = Int.MIN_VALUE
 
@@ -414,12 +415,6 @@ object FarmLockRenderer {
             data[size++] = x
             data[size++] = y
             data[size++] = z
-        }
-
-        fun addAll(source: FloatArray, from: Int, count: Int) {
-            while (size + count > data.size) data = data.copyOf(data.size * 2)
-            source.copyInto(data, size, from, from + count)
-            size += count
         }
 
         fun quadY(y: Float, x0: Float, z0: Float, x1: Float, z1: Float) {

@@ -32,3 +32,6 @@ Client-side light level overlay that shows block light levels on the floor, colo
     versionRange="*"
     ordering="NONE"
     side="CLIENT"
+
+[[mixins]]
+    config="lightoverlay.neoforge.mixins.json"

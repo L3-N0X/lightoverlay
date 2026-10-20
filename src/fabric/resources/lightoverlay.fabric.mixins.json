@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "de.lenox.lightoverlay.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+  ],
+  "client": [
+    "MixinLevelRenderer"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
